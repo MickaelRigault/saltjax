@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=61.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "saltjax"
+description = "Fast batched SALT2 lightcurve fitting with JAX, reproducing sncosmo"
+authors = [
+    {name = "Mickael Rigault", email = "m.rigault@ipnl.in2p3.fr"},
+]
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+keywords = ["astronomy", "astrophysics", "supernovae", "jax"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    # basic
+    "numpy >=1.26",
+    "pandas",
+    "scipy",
+    # jax
+    "jax",
+    # Astro
+    "sncosmo",
+    "extinction",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/MickaelRigault/saltjax"
+
+[project.optional-dependencies]
+docs = [
+    "myst-nb",
+    "sphinx-book-theme",
+    "sphinx_copybutton",
+    "sphinx-design",
+]
+tests = ["pytest", "coverage", "iminuit"]
+progress = ["tqdm"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "saltjax.__version__"}
+
+
+# RUFF
+[tool.ruff]
+exclude = ["tests", "docs"]
+include = ["*.py"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", # flake8
+  "NPY",         # numpy
+]
+ignore = [
+  "E501",  # line-too-long
+]
+unfixable = [
+  "F841", # Removes unused variables
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["saltjax"]
+
+[tool.pytest.ini_options]
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["saltjax"]
+omit = ["tests/*"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "except ImportError",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]

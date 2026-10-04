@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints
+*.egg
+*.egg-info
+dist
+build
+.coverage
+.pytest_cache
+.ruff_cache
+.nox
+.DS_Store
+docs/_build
+docs/api/generated/
