@@ -24,9 +24,7 @@ dust (any law, per-SN E(B-V) and R_V) gives the same saltjax time, while sncosmo
 ## Install
 
 ```bash
-git clone https://github.com/MickaelRigault/saltjax.git
-cd saltjax
-pip install .
+pip install saltjax
 ```
 
 ## Quick start
