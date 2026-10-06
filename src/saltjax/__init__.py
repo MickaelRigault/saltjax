@@ -1,6 +1,6 @@
 """Fast batched SALT2 / SALT3 lightcurve fitting with JAX, reproducing sncosmo."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .fit import fit_salt # noqa: F401, E402
 from .tables import build_tables, get_tables, get_salt_source # noqa: F401, E402
