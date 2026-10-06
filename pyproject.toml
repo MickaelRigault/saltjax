@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "saltjax"
-description = "Fast batched SALT2 lightcurve fitting with JAX, reproducing sncosmo"
+description = "Fast batched SALT2 / SALT3 lightcurve fitting with JAX, reproducing sncosmo"
 authors = [
     {name = "Mickael Rigault", email = "m.rigault@ipnl.in2p3.fr"},
 ]

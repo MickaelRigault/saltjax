@@ -1,4 +1,4 @@
-"""Batched SALT2 fit of many lightcurves."""
+"""Batched SALT2 / SALT3 fit of many lightcurves."""
 
 import warnings
 
@@ -7,7 +7,7 @@ import pandas
 import jax
 import jax.numpy as jnp
 
-from .tables import get_salt2_source, get_tables
+from .tables import get_salt_source, get_tables
 from .data import LC_KEYS, FIT_KEYS, pack_lightcurves
 from .model import phase_grids
 from .fitter import fit_batch, initial_batch, compile_all, get_compiled
@@ -27,22 +27,24 @@ def _next_pow(n, base=2, minimum=1):
 
 
 def fit_salt(data, targets, indexes=None, modelcov=True, phase_range=[-10, 40],
-             guess="data", source="salt2", version=None, mwebv_key="mwebv", mw_r_v=3.1,
+             guess="data", source="salt2", version=None, modeldir=None,
+             effects=None, effect_names=None, effect_frames=None, mwebv_key="mwebv", mw_r_v=3.1,
              c_max=1.5, dz=2.5e-4, batch_points=2048, minsnr=5., nrefit=10,
              time_key=None, progress_bar=False, verbose=False):
-    """Fit SALT2 on many lightcurves at once, reproducing ``sncosmo.fit_lc``.
+    """Fit a SALT model on many lightcurves at once, reproducing ``sncosmo.fit_lc``.
 
     Same model, same chi2 and same model-covariance procedure as
-    ``sncosmo.fit_lc``; parameters (t0, x0, x1, c) are not bounded and the
-    redshift is fixed.
+    ``sncosmo.fit_lc``; parameters (t0, x0, x1, c) are not bounded, and the
+    redshift and the parameters of the effects (e.g. dust) are fixed.
 
     Targets are grouped by number of lightcurve points (padded to 16, 32, 64,
     ... points) and fitted by batches whose shape only depends on that number.
-    The model tables are cached per (bands, redshift range rounded to 0.01,
-    E(B-V) range rounded to 0.1), and the compiled fit is reused by any later
-    call using the same tables. The first call of a session includes a few
-    seconds of tabulation and (parallel) compilation; such later calls do not.
-    Prefer one call over many small ones.
+    The model tables are cached per (bands, redshift range rounded to 0.01),
+    and the compiled fit is reused by any later call using the same tables.
+    The first call of a session includes a few seconds of tabulation and
+    (parallel) compilation; such later calls do not. The band fluxes of each
+    target, with its effects (e.g. Milky Way and host dust), are integrated
+    exactly at each call. Prefer one call over many small ones.
 
     Parameters
     ----------
@@ -54,13 +56,14 @@ def fit_salt(data, targets, indexes=None, modelcov=True, phase_range=[-10, 40],
     targets : pandas.DataFrame
         Targets, indexed as the first level of `data`, with a 'z' column; a
         't0' column if `phase_range` is given; 't0', 'x1' and 'c' columns if
-        ``guess='truth'``; and a `mwebv_key` column for the Milky Way dust.
+        ``guess='truth'``; and the parameters of the effects: columns
+        ``{name}{param}`` (e.g. 'mwebv', 'hostebv', 'hostr_v'), see `effects`.
 
     indexes : list or None, optional
         Targets to fit. If None, all the targets with data. The default is None.
 
     modelcov : bool, optional
-        Include the SALT2 model covariance in the chi2, as in
+        Include the SALT model covariance in the chi2, as in
         ``sncosmo.fit_lc(..., modelcov=True)``. The default is True.
 
     phase_range : list or None, optional
@@ -73,19 +76,44 @@ def fit_salt(data, targets, indexes=None, modelcov=True, phase_range=[-10, 40],
         {-0.2, 0, 0.2, 0.4}); 'truth': the targets' t0, x1 and c. In both cases
         x0 is solved linearly. The default is 'data'.
 
-    source : str or sncosmo.SALT2Source, optional
-        SALT2 source. The default is 'salt2'.
+    source : str or sncosmo.SALT2Source or sncosmo.SALT3Source, optional
+        SALT model: the name of any SALT2 or SALT3 source registered in
+        sncosmo (e.g. 'salt2', 'salt2-extended', 'salt2-h17', 'salt3',
+        'salt3-nir'), or an instance (see `modeldir`). The default is 'salt2'.
 
     version : str or None, optional
         Version of the source, if given by name. The default is None (latest).
 
+    modeldir : str or None, optional
+        Directory of the source files (with sncosmo's default file names).
+        If None, it is found from the sncosmo registry, so it is required for
+        a source instance that is not registered in sncosmo (e.g.
+        ``sncosmo.SALT3Source(modeldir=...)``). The default is None.
+
+    effects : list of sncosmo.PropagationEffect or None, optional
+        Propagation effects, as in ``sncosmo.Model``: any sncosmo dust
+        (``CCM89Dust``, ``OD94Dust``, ``F99Dust``) or any other effect that
+        is a deterministic transmission in wavelength. The parameter ``p`` of
+        the effect named ``name`` is read per target from the column
+        ``f"{name}{p}"`` of `targets` (e.g. 'hostebv', 'hostr_v'), or else
+        taken from the effect instance. If None, Milky Way CCM89 dust from
+        `mwebv_key` and `mw_r_v`. The default is None.
+
+    effect_names : list of str or None, optional
+        Names of the effects (required with `effects`), e.g. ['mw', 'host'].
+        The default is None.
+
+    effect_frames : list of str or None, optional
+        Frames of the effects (required with `effects`): 'obs' (e.g. Milky
+        Way dust) or 'rest' (e.g. host dust). The default is None.
+
     mwebv_key : str or None, optional
-        Column of `targets` with the Milky Way E(B-V) (CCM89 dust in the
-        observer frame, as ``sncosmo.CCM89Dust``). If None or absent, no
-        Milky Way dust. The default is 'mwebv'.
+        Only if `effects` is None: column of `targets` with the Milky Way
+        E(B-V) (``sncosmo.CCM89Dust`` in the observer frame, named 'mw'). If
+        None or absent, no effect. The default is 'mwebv'.
 
     mw_r_v : float, optional
-        R_V of the Milky Way dust. The default is 3.1.
+        Only if `effects` is None: R_V of the Milky Way dust. The default is 3.1.
 
     c_max : float, optional
         Largest absolute color for which the model is exact; a warning is
@@ -121,9 +149,10 @@ def fit_salt(data, targets, indexes=None, modelcov=True, phase_range=[-10, 40],
     -------
     pandas.DataFrame
         One row per fitted target: ``z``, ``t0``, ``x0``, ``x1``, ``c``, their
-        ``_err``, ``cov_{p}{q}``, the fixed ``mwebv`` and ``mwr_v`` (if Milky Way
-        dust), ``chi2``, ``ndof``, ``converged``, ``nrefit`` and ``valid``
-        (False if the covariance is not positive: errors are then NaN).
+        ``_err``, ``cov_{p}{q}``, the fixed parameters of the effects
+        (``{name}{param}``, e.g. ``mwebv`` and ``mwr_v``), ``chi2``, ``ndof``,
+        ``converged``, ``nrefit`` and ``valid`` (False if the covariance is
+        not positive: errors are then NaN).
 
     Notes
     -----
@@ -134,32 +163,32 @@ def fit_salt(data, targets, indexes=None, modelcov=True, phase_range=[-10, 40],
     Raises
     ------
     NotImplementedError
-        If the source is not a SALT2 source, or a magnitude system other than
-        'ab' is used.
+        If the source is not a SALT2 or SALT3 source, a magnitude system other
+        than 'ab' is used, or an effect is not supported ('free' frame, random
+        scattering effects).
 
     ValueError
-        If `guess` is not 'data' or 'truth'.
+        If `guess` is not 'data' or 'truth', or the effects are inconsistent.
     """
     if guess not in ("data", "truth"):
         raise ValueError(f"guess must be 'data' or 'truth', not {guess!r}")
     if indexes is None:
         indexes = data.index.get_level_values(0).unique()
     indexes = list(indexes)
-    src = get_salt2_source(source, version)
+    src = get_salt_source(source, version)
     truth = targets.loc[indexes]
-    has_mw = mwebv_key is not None and mwebv_key in truth
-    ebv = truth[mwebv_key].to_numpy(float) if has_mw else np.zeros(len(truth))
     bands = sorted(data.loc[indexes]["band"].unique())
-    tables = get_tables(bands, src, truth["z"].min(), truth["z"].max(),
-                        ebv_max=ebv.max() if has_mw else 0., r_v=mw_r_v, c_max=c_max, dz=dz)
+    tables = get_tables(bands, src, truth["z"].min(), truth["z"].max(), c_max=c_max, dz=dz,
+                        modeldir=modeldir)
     grid, nbands = phase_grids(tables), len(tables["bands"])
     if verbose:
-        print(f"tables: {len(tables['zgrid'])} redshifts, {tables['nc']} color "
-              f"and {tables['nm']} dust terms")
+        print(f"tables: {len(tables['zgrid'])} redshifts, {tables['nc']} color terms")
 
     with jax.enable_x64(True):
         arr = pack_lightcurves(data, targets, tables, indexes=indexes, phase_range=phase_range,
-                               mwebv_key=mwebv_key if has_mw else None, time_key=time_key)
+                               effects=effects, effect_names=effect_names,
+                               effect_frames=effect_frames, mwebv_key=mwebv_key,
+                               mw_r_v=mw_r_v, time_key=time_key)
         npts = arr["mask"].sum(1).astype(int)
         detected = np.any((arr["flux"] / arr["err"] >= minsnr) & (arr["mask"] > 0), axis=1)
         constrained = npts > len(PARAMS)
@@ -235,9 +264,8 @@ def fit_salt(data, targets, indexes=None, modelcov=True, phase_range=[-10, 40],
         for j, q in enumerate(PARAMS):
             results[f"cov_{p}{q}"] = out["cov"][:, i, j]
     results["z"] = arr["z"][pos]
-    if has_mw:
-        results["mwebv"] = arr["ebv"][pos]
-        results["mwr_v"] = mw_r_v
+    for col in arr["effects"]:
+        results[col] = arr["effects"][col].to_numpy()[pos]
     for k in ("chi2", "ndof", "converged", "nrefit"):
         results[k] = out[k]
     results["valid"] = valid

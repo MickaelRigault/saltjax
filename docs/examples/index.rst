@@ -13,6 +13,13 @@ Complete, executed notebooks. Download one (button at the top of each page) and 
       Interpolation, model fluxes, model covariance, fitted parameters, errors
       and :math:`\chi^2`, compared with sncosmo.
 
+   .. grid-item-card:: :octicon:`globe;1.5em;sd-mr-1` Dust and other effects
+      :link: dust
+      :link-type: doc
+
+      Milky Way and host dust with any sncosmo dust law, per-target :math:`E(B-V)`
+      and :math:`R_V`, user-defined effects, compared with sncosmo.
+
    .. grid-item-card:: :octicon:`stopwatch;1.5em;sd-mr-1` Speed: saltjax vs sncosmo
       :link: speed
       :link-type: doc
@@ -25,4 +32,5 @@ Complete, executed notebooks. Download one (button at the top of each page) and 
    :maxdepth: 1
 
    validation
+   dust
    speed

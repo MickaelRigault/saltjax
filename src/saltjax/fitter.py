@@ -1,4 +1,4 @@
-"""Batched Levenberg-Marquardt SALT2 fit (compiled with JAX)."""
+"""Batched Levenberg-Marquardt SALT fit (compiled with JAX)."""
 
 import os
 from concurrent.futures import ThreadPoolExecutor

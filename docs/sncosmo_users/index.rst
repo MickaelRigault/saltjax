@@ -16,8 +16,9 @@ model. saltjax fits *all* lightcurves in one call, from two :class:`pandas.DataF
    ``zpsys`` (only ``'ab'``).
 
 ``targets``
-   One row per target: ``z`` (required), ``mwebv`` for the Milky Way extinction
-   (optional), and ``t0`` if you select data with ``phase_range``.
+   One row per target: ``z`` (required), the parameters of the effects (e.g.
+   ``mwebv`` for the Milky Way extinction, ``hostebv`` and ``hostr_v`` for host
+   dust; optional), and ``t0`` if you select data with ``phase_range``.
 
 .. code-block:: python
 
@@ -46,9 +47,17 @@ Translation table
    * - ``data`` (one Table)
      - ``data`` (all lightcurves) and ``targets`` (z, mwebv, ...)
    * - ``model=sncosmo.Model("salt2")``
-     - ``source="salt2"`` (any ``sncosmo.SALT2Source``)
-   * - ``CCM89Dust`` effect (``frame="obs"``), ``mwebv``
-     - ``targets["mwebv"]`` (``mwebv_key``) and ``mw_r_v``
+     - ``source="salt2"`` (any registered ``sncosmo.SALT2Source`` or
+       ``sncosmo.SALT3Source``, e.g. ``"salt3"``, ``"salt2-extended"``)
+   * - ``effects``, ``effect_names``, ``effect_frames`` of ``sncosmo.Model``
+     - the same ``effects``, ``effect_names``, ``effect_frames`` arguments
+       (``"obs"`` or ``"rest"``); see :doc:`/examples/dust`
+   * - ``model.set(mwebv=..., hostebv=..., hostr_v=...)``
+     - columns ``mwebv``, ``hostebv``, ``hostr_v`` of ``targets`` (one value per
+       target; a missing column means the effect's own value)
+   * - ``CCM89Dust`` effect named ``mw`` (``frame="obs"``)
+     - the default when ``effects`` is not given: ``targets["mwebv"]``
+       (``mwebv_key``) and ``mw_r_v``
    * - ``vparam_names=['t0', 'x0', 'x1', 'c']``
      - always these four parameters; ``z`` is fixed
    * - ``modelcov=True``

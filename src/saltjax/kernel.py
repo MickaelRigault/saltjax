@@ -60,8 +60,10 @@ def kernel_weights(u, n, xp=np):
     i = xp.clip(xp.floor(u), 0, n - 2).astype(int)
     f = u - i
     edge = (i == 0) | (i == n - 2)
-    wc = xp.stack([_keys(f + 1, xp=xp), _keys(f, xp=xp),
-                   _keys(1 - f, xp=xp), _keys(2 - f, xp=xp)], -1)
+    # Keys kernel at the distances 1+f, f, 1-f, 2-f (0 <= f <= 1 inside the grid)
+    a, g = -0.5, 1 - f
+    wc = xp.stack([a * f * g * g, ((a + 2) * f - (a + 3)) * f * f + 1,
+                   ((a + 2) * g - (a + 3)) * g * g + 1, a * g * f * f], -1)
     wl = xp.stack([xp.zeros_like(f), 1 - f, f, xp.zeros_like(f)], -1)
     w = xp.where(edge[..., None], wl, wc) * inside[..., None]
     idx = xp.clip(i[..., None] + xp.arange(-1, 3), 0, n - 1)

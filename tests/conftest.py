@@ -7,8 +7,8 @@ import sncosmo
 BANDS = ["bessellb", "bessellv", "bessellr"]
 
 
-def _sncosmo_model(row):
-    model = sncosmo.Model("salt2", effects=[sncosmo.CCM89Dust()],
+def _sncosmo_model(row, source="salt2", version=None):
+    model = sncosmo.Model(sncosmo.get_source(source, version=version), effects=[sncosmo.CCM89Dust()],
                           effect_names=["mw"], effect_frames=["obs"])
     model.set(z=row["z"], t0=row["t0"], x0=row["x0"], x1=row["x1"], c=row["c"],
               mwebv=row["mwebv"])

@@ -8,7 +8,7 @@ import saltjax
 PARAMS = ["t0", "x0", "x1", "c"]
 
 
-def _fit_lc(data, targets, sncosmo_model, modelcov, phase_range=(-10, 40)):
+def _fit_lc(data, targets, sncosmo_model, modelcov, phase_range=(-10, 40), source="salt2"):
     """sncosmo.fit_lc per target, started at the truth with wide bounds."""
     out = {}
     for name, row in targets.iterrows():
@@ -16,7 +16,7 @@ def _fit_lc(data, targets, sncosmo_model, modelcov, phase_range=(-10, 40)):
         phase = (lc["time"] - row["t0"]) / (1 + row["z"])
         lc = lc[phase.between(*phase_range)]
         lc = {k: lc[k].to_numpy() for k in ["time", "band", "flux", "fluxerr", "zp", "zpsys"]}
-        model = sncosmo_model(row)
+        model = sncosmo_model(row, source)
         bounds = {"t0": (row["t0"] - 15, row["t0"] + 15), "x1": (row["x1"] - 5, row["x1"] + 5),
                   "c": (row["c"] - 1, row["c"] + 1)}
         res, _ = sncosmo.fit_lc(lc, model, PARAMS, bounds=bounds, modelcov=modelcov)
@@ -25,12 +25,13 @@ def _fit_lc(data, targets, sncosmo_model, modelcov, phase_range=(-10, 40)):
     return pandas.DataFrame(out).T
 
 
+@pytest.mark.parametrize("source", ["salt2", "salt3"])
 @pytest.mark.parametrize("modelcov", [False, True])
-def test_fit_matches_sncosmo(simulation, sncosmo_model, modelcov):
+def test_fit_matches_sncosmo(simulation, sncosmo_model, modelcov, source):
     pytest.importorskip("iminuit")
     data, targets = simulation
-    jres = saltjax.fit_salt(data, targets, modelcov=modelcov)
-    sres = _fit_lc(data, targets, sncosmo_model, modelcov)
+    jres = saltjax.fit_salt(data, targets, modelcov=modelcov, source=source)
+    sres = _fit_lc(data, targets, sncosmo_model, modelcov, source=source)
     assert set(jres.index) == set(sres.index)
     for p in PARAMS:
         pull = (jres.loc[sres.index, p] - sres[p]) / sres[f"{p}_err"]
@@ -113,3 +114,15 @@ def test_valid_column(simulation):
     res = saltjax.fit_salt(data, targets, modelcov=False)
     assert res["valid"].dtype == bool and res["valid"].all()
     assert np.isfinite(res[[f"{p}_err" for p in PARAMS]].to_numpy()).all()
+
+
+def test_unregistered_source_needs_modeldir(simulation):
+    data, targets = simulation
+    modeldir = sncosmo.builtins.DATADIR.abspath("models/salt3/salt3-f22", isdir=True)
+    src = sncosmo.SALT3Source(modeldir=modeldir)          # not registered: no name
+    with pytest.raises(ValueError, match="modeldir"):
+        saltjax.fit_salt(data, targets, modelcov=False, source=src)
+    res = saltjax.fit_salt(data, targets, modelcov=False, source=src, modeldir=modeldir)
+    ref = saltjax.fit_salt(data, targets, modelcov=False, source="salt3", version="2.0")
+    np.testing.assert_allclose(res[PARAMS].astype(float), ref.loc[res.index, PARAMS].astype(float),
+                               rtol=1e-10)
