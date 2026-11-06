@@ -1,4 +1,12 @@
-"""Batched Levenberg-Marquardt SALT fit (compiled with JAX)."""
+"""Batched Levenberg-Marquardt SALT fit (compiled with JAX).
+
+- One target: :func:`get_cinv_operator` (inverse data + model covariance),
+  :func:`levenberg_marquardt` (minimisation) and :func:`fit_one` (first fit,
+  then refits with the model covariance, as ``sncosmo.fit_lc``).
+- Batches: :func:`initial_batch` (initial guess) and :func:`fit_batch`
+  (vectorised :func:`fit_one`), compiled by :func:`get_compiled` /
+  :func:`compile_all` and cached (see :func:`clear_cache`).
+"""
 
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -9,7 +17,11 @@ import jax.numpy as jnp
 
 from .model import bandflux, rvar_and_cdisp
 
-__all__ = ["fit_batch", "initial_batch", "compile_all", "get_compiled", "enable_x64"]
+__all__ = ["fit_batch", "initial_batch", "compile_all", "get_compiled", "enable_x64",
+           # one target
+           "get_cinv_operator", "levenberg_marquardt", "fit_one",
+           # cache
+           "clear_cache", "get_ncompiled"]
 
 
 def enable_x64(enabled=True):
@@ -41,93 +53,199 @@ def enable_x64(enabled=True):
     return experimental_enable_x64(enabled)
 
 
-# ================================================================== #
-#  Chi2 and minimisation (one target)                                #
-# ================================================================== #
-def _cinv_operator(d, theta=None, grid=None, nbands=None):
-    """Return v -> C^-1 v for the data covariance (+ model covariance).
+# ================== #
+#                    #
+#   One target       #
+#                    #
+# ================== #
+def get_cinv_operator(packed, theta=None, grid=None, nbands=None):
+    """Get the operator v -> C^-1 v of the data covariance (+ model covariance).
 
     Without `theta`: C = diag(fluxerr^2). With `theta`: C = diag(fluxerr^2) +
     f f^T rcov(theta) = D + U U^T, with D diagonal and U (npoints, nbands)
-    holding cdisp_b * f on the points of band b (Woodbury identity, exact).
+    holding cdisp_b * f on the points of band b, inverted exactly with the
+    Woodbury identity (the dense covariance is never built).
+
+    Parameters
+    ----------
+    packed : dict
+        Packed arrays of the target (see :func:`saltjax.data.pack_lightcurves`).
+
+    theta : jax.Array or None, optional
+        (t0, x0, x1, c) at which the model covariance is computed. If None,
+        no model covariance. The default is None.
+
+    grid : tuple or None, optional
+        Output of :func:`saltjax.model.phase_grids`. Required with `theta`.
+        The default is None.
+
+    nbands : int or None, optional
+        Number of bands of the tables. Required with `theta`. The default is None.
+
+    Returns
+    -------
+    callable
+        ``apply(v)``: C^-1 v, for v of shape (npoints,) or (npoints, k).
+        Masked (padded) points have C^-1 = 0.
     """
-    m = d["mask"]
+    mask = packed["mask"]
     if theta is None:
-        dinv = m / d["err"] ** 2
-        return lambda v: dinv.reshape(dinv.shape + (1,) * (v.ndim - 1)) * v
-    f = bandflux(theta, d, grid)
-    rvar, cd = rvar_and_cdisp(theta, d, grid)
-    dinv = m / (d["err"] ** 2 + f ** 2 * rvar)
-    U = (cd * f * m)[:, None] * (d["band"][:, None] == jnp.arange(nbands)[None, :])
+        dinv = mask / packed["err"] ** 2
+
+        def apply_diagonal(v):
+            return dinv.reshape(dinv.shape + (1,) * (v.ndim - 1)) * v
+        return apply_diagonal
+
+    # D: data variance + diagonal model variance; U: color dispersion (one column per band)
+    flux = bandflux(theta, packed, grid)
+    rvar, cdisp = rvar_and_cdisp(theta, packed, grid)
+    dinv = mask / (packed["err"] ** 2 + flux ** 2 * rvar)                                 # (npoints,)
+    U = (cdisp * flux * mask)[:, None] * (packed["band"][:, None] == jnp.arange(nbands)[None, :])  # (npoints, nbands)
     DU = dinv[:, None] * U
-    S = jnp.linalg.inv(jnp.eye(nbands) + U.T @ DU)
+    S = jnp.linalg.inv(jnp.eye(nbands) + U.T @ DU)                                       # (nbands, nbands)
 
     def apply(v):
+        # Woodbury: (D + U U^T)^-1 = D^-1 - D^-1 U (1 + U^T D^-1 U)^-1 U^T D^-1
         dv = dinv.reshape(dinv.shape + (1,) * (v.ndim - 1)) * v
         return dv - DU @ (S @ (DU.T @ v))
     return apply
 
 
-def _lm(q0, scale, d, grid, cinv, n):
-    """Levenberg-Marquardt minimisation of r^T C^-1 r, with r = flux - model."""
+def levenberg_marquardt(q0, scale, packed, grid, cinv, niter):
+    """Minimise r^T C^-1 r, with r = flux - model, by Levenberg-Marquardt.
+
+    The parameters are rescaled (``theta = q * scale``) so that they are all
+    of order 1 (x0 is ~1e-5).
+
+    Parameters
+    ----------
+    q0 : jax.Array
+        Initial rescaled parameters, shape (4,).
+
+    scale : jax.Array
+        Scale of each parameter, shape (4,).
+
+    packed : dict
+        Packed arrays of the target.
+
+    grid : tuple
+        Output of :func:`saltjax.model.phase_grids`.
+
+    cinv : callable
+        Inverse covariance operator (see :func:`get_cinv_operator`).
+
+    niter : int
+        Number of iterations (fixed, for the JIT).
+
+    Returns
+    -------
+    q : jax.Array
+        Best-fit rescaled parameters.
+
+    chi2 : jax.Array
+        Chi2 at `q`.
+
+    cov_q : jax.Array
+        Covariance of `q`: 2 x the inverse Hessian of the chi2 (as Minuit HESSE).
+    """
     def model(q):
-        return bandflux(q * scale, d, grid) * d["mask"]
+        return bandflux(q * scale, packed, grid) * packed["mask"]
 
     def chi2(q):
-        r = (d["flux"] * d["mask"] - model(q))
-        return r @ cinv(r)
+        residual = (packed["flux"] * packed["mask"] - model(q))
+        return residual @ cinv(residual)
 
     def step(carry, _):
-        q, lam, c2 = carry
-        r = d["flux"] * d["mask"] - model(q)
+        q, damping, chi2_ = carry
+        residual = packed["flux"] * packed["mask"] - model(q)
         J = jax.jacfwd(model)(q)                      # (npoints, 4)
         CJ = cinv(J)
-        A = J.T @ CJ
-        qn = q + jnp.linalg.solve(A + lam * jnp.diag(jnp.diag(A) + 1e-12), CJ.T @ r)
-        c2n = chi2(qn)
-        ok = c2n < c2
-        return (jnp.where(ok, qn, q), jnp.where(ok, lam * 0.3, lam * 10.),
-                jnp.where(ok, c2n, c2)), None
+        A = J.T @ CJ                                  # (4, 4) normal matrix
+        q_new = q + jnp.linalg.solve(A + damping * jnp.diag(jnp.diag(A) + 1e-12), CJ.T @ residual)
+        chi2_new = chi2(q_new)
+        # accept the step if the chi2 decreases (and trust the quadratic model more)
+        better = chi2_new < chi2_
+        return (jnp.where(better, q_new, q), jnp.where(better, damping * 0.3, damping * 10.),
+                jnp.where(better, chi2_new, chi2_)), None
 
-    (q, _, c2), _ = jax.lax.scan(step, (q0, 1e-3, chi2(q0)), None, length=n)
+    (q, _, chi2_), _ = jax.lax.scan(step, (q0, 1e-3, chi2(q0)), None, length=niter)
     cov_q = 2. * jnp.linalg.inv(jax.hessian(chi2)(q))     # as Minuit HESSE
-    return q, c2, cov_q
+    return q, chi2_, cov_q
 
 
-def _fit_one(theta0, d, grid, nbands, modelcov, niter, niter_refit, nrefit, tol):
-    """Fit one target, following sncosmo.fit_lc for the model covariance."""
-    scale = jnp.array([1., theta0[1], 1., 1.])
-    q, c2, cov_q = _lm(theta0 / scale, scale, d, grid, _cinv_operator(d), niter)
-    nref, done = jnp.array(0), jnp.array(True)
+def fit_one(theta0, packed, grid, nbands, modelcov=True, niter=20, niter_refit=10, nrefit=10, tol=0.1):
+    """Fit one target, following ``sncosmo.fit_lc`` for the model covariance.
+
+    A first fit without model covariance, then (if `modelcov`) refits with
+    the model covariance computed at the current best fit, until all
+    parameters move by less than `tol` sigma (or `nrefit` refits).
+
+    It is traced and compiled by :func:`fit_batch` (one call per target);
+    calling it directly (not compiled) is useful to check a single fit.
+
+    Parameters
+    ----------
+    theta0 : jax.Array
+        Initial (t0, x0, x1, c).
+
+    packed : dict
+        Packed arrays of the target.
+
+    grid : tuple
+        Output of :func:`saltjax.model.phase_grids`.
+
+    nbands : int
+        Number of bands of the tables.
+
+    modelcov, niter, niter_refit, nrefit, tol : optional
+        See :func:`fit_batch`.
+
+    Returns
+    -------
+    dict
+        theta, cov, chi2, ndof, converged and nrefit.
+    """
+    scale = jnp.array([1., theta0[1], 1., 1.])       # x0 rescaled to ~1
+    q, chi2, cov_q = levenberg_marquardt(theta0 / scale, scale, packed, grid,
+                                         get_cinv_operator(packed), niter)
+    nrefit_done, converged = jnp.array(0), jnp.array(True)
+
     if modelcov:
         def refit(carry, _):
-            q, c2, cov_q, done, n = carry
-            cinv = _cinv_operator(d, jax.lax.stop_gradient(q * scale), grid, nbands)
-            qn, c2n, covn = _lm(q, scale, d, grid, cinv, niter_refit)
-            conv = jnp.all(jnp.abs(qn - q) / jnp.sqrt(jnp.diag(covn)) < tol)
-            return (jnp.where(done, q, qn), jnp.where(done, c2, c2n),
-                    jnp.where(done, cov_q, covn), done | conv, n + (~done)), None
-        (q, c2, cov_q, done, nref), _ = jax.lax.scan(
-            refit, (q, c2, cov_q, jnp.array(False), nref), None, length=nrefit)
-    return dict(theta=q * scale, cov=cov_q * jnp.outer(scale, scale), chi2=c2,
-                ndof=jnp.sum(d["mask"]) - 4, converged=done, nrefit=nref)
+            q, chi2, cov_q, converged, nrefit_done = carry
+            # model covariance at the current best fit (not differentiated)
+            cinv = get_cinv_operator(packed, jax.lax.stop_gradient(q * scale), grid, nbands)
+            q_new, chi2_new, cov_new = levenberg_marquardt(q, scale, packed, grid, cinv, niter_refit)
+            moved_little = jnp.all(jnp.abs(q_new - q) / jnp.sqrt(jnp.diag(cov_new)) < tol)
+            # once converged, keep the values (scan has a fixed length)
+            return (jnp.where(converged, q, q_new), jnp.where(converged, chi2, chi2_new),
+                    jnp.where(converged, cov_q, cov_new), converged | moved_little,
+                    nrefit_done + (~converged)), None
+
+        (q, chi2, cov_q, converged, nrefit_done), _ = jax.lax.scan(
+            refit, (q, chi2, cov_q, jnp.array(False), nrefit_done), None, length=nrefit)
+
+    return dict(theta=q * scale, cov=cov_q * jnp.outer(scale, scale), chi2=chi2,
+                ndof=jnp.sum(packed["mask"]) - 4, converged=converged, nrefit=nrefit_done)
 
 
-# ================================================================== #
-#  Batched, compiled functions                                       #
-# ================================================================== #
+# ================== #
+#                    #
+#   Batches          #
+#                    #
+# ================== #
 @partial(jax.jit, static_argnames=("grid", "nbands", "modelcov", "niter", "niter_refit",
                                    "nrefit", "tol"))
-def fit_batch(theta0, d, grid, nbands, modelcov=True, niter=20, niter_refit=10,
+def fit_batch(theta0, packed, grid, nbands, modelcov=True, niter=20, niter_refit=10,
               nrefit=10, tol=0.1):
-    """Fit a batch of targets.
+    """Fit a batch of targets (vectorised :func:`fit_one`).
 
     Parameters
     ----------
     theta0 : jax.Array
         Initial (t0, x0, x1, c), shape (ntargets, 4).
 
-    d : dict
+    packed : dict
         Packed arrays of the targets (one row per target).
 
     grid : tuple
@@ -159,12 +277,12 @@ def fit_batch(theta0, d, grid, nbands, modelcov=True, niter=20, niter_refit=10,
     dict
         theta, cov, chi2, ndof, converged and nrefit, one entry per target.
     """
-    return jax.vmap(lambda th, dd: _fit_one(th, dd, grid, nbands, modelcov, niter,
-                                            niter_refit, nrefit, tol))(theta0, d)
+    return jax.vmap(lambda theta_, packed_: fit_one(theta_, packed_, grid, nbands, modelcov, niter,
+                                                    niter_refit, nrefit, tol))(theta0, packed)
 
 
 @partial(jax.jit, static_argnames=("grid", "t0_offsets", "c_values"))
-def initial_batch(d, theta_in, grid, t0_offsets=(0.,), c_values=None):
+def initial_batch(packed, theta_in, grid, t0_offsets=(0.,), c_values=None):
     """Get the initial guess of a batch of targets.
 
     t0 is scanned over `t0_offsets` (and c over `c_values`, if given), x0 is
@@ -172,7 +290,7 @@ def initial_batch(d, theta_in, grid, t0_offsets=(0.,), c_values=None):
 
     Parameters
     ----------
-    d : dict
+    packed : dict
         Packed arrays of the targets (one row per target).
 
     theta_in : jax.Array
@@ -192,33 +310,42 @@ def initial_batch(d, theta_in, grid, t0_offsets=(0.,), c_values=None):
     jax.Array
         Initial (t0, x0, x1, c), shape (ntargets, 4).
     """
-    dt, cc = jnp.meshgrid(jnp.asarray(t0_offsets),
-                          jnp.asarray(c_values if c_values is not None else (jnp.nan,)))
-    dt, cc = dt.ravel(), cc.ravel()
+    # grid of (t0 offset, c) trials; c = nan means "keep the starting c"
+    dt0, color = jnp.meshgrid(jnp.asarray(t0_offsets),
+                              jnp.asarray(c_values if c_values is not None else (jnp.nan,)))
+    dt0, color = dt0.ravel(), color.ravel()
 
-    def one(dd, th):
-        w = dd["mask"] / dd["err"] ** 2
+    def initial_one(packed_, theta_):
+        weight = packed_["mask"] / packed_["err"] ** 2
 
-        def trial(dt, c):
-            tt = th.at[0].add(dt).at[1].set(1.).at[3].set(jnp.where(jnp.isnan(c), th[3], c))
-            mf = bandflux(tt, dd, grid)
-            norm = jnp.sum(w * mf * mf)
-            x0 = jnp.clip(jnp.sum(w * mf * dd["flux"]) / jnp.where(norm > 0, norm, 1.), 1e-15, None)
-            return tt.at[1].set(x0), jnp.sum(w * (dd["flux"] - x0 * mf) ** 2)
-        ths, chi2 = jax.vmap(trial)(dt, cc)
-        return ths[jnp.argmin(chi2)]
-    return jax.vmap(one)(d, theta_in)
+        def trial(dt0_, color_):
+            theta_trial = theta_.at[0].add(dt0_).at[1].set(1.).at[3].set(
+                jnp.where(jnp.isnan(color_), theta_[3], color_))
+            model_flux = bandflux(theta_trial, packed_, grid)          # for x0 = 1
+            # x0: weighted linear least squares
+            norm = jnp.sum(weight * model_flux * model_flux)
+            x0 = jnp.clip(jnp.sum(weight * model_flux * packed_["flux"]) / jnp.where(norm > 0, norm, 1.),
+                          1e-15, None)
+            return theta_trial.at[1].set(x0), jnp.sum(weight * (packed_["flux"] - x0 * model_flux) ** 2)
+
+        thetas, chi2 = jax.vmap(trial)(dt0, color)
+        return thetas[jnp.argmin(chi2)]
+
+    return jax.vmap(initial_one)(packed, theta_in)
 
 
-# ================================================================== #
-#  Ahead-of-time compilation                                         #
-# ================================================================== #
-_COMPILED = {}
+# ================== #
+#                    #
+#   Compilation      #
+#                    #
+# ================== #
+_COMPILED = {}   # compiled functions, per (function, argument shapes, static arguments)
 
 
-def _compile_key(fn, args, static):
+def _get_compile_key_(fn, args, static):
+    """Key of `_COMPILED`: function name, argument structure/shapes/dtypes and static arguments."""
     leaves, tree = jax.tree_util.tree_flatten(args)
-    return (fn.__name__, tree, tuple((x.shape, str(x.dtype)) for x in leaves),
+    return (fn.__name__, tree, tuple((leaf_.shape, str(leaf_.dtype)) for leaf_ in leaves),
             tuple(sorted(static.items())))
 
 
@@ -241,7 +368,7 @@ def get_compiled(fn, args, static):
     callable
         The compiled function, called with `args` only.
     """
-    key = _compile_key(fn, args, static)
+    key = _get_compile_key_(fn, args, static)
     if key not in _COMPILED:
         with enable_x64(True):   # the x64 flag is thread-local
             _COMPILED[key] = fn.lower(*args, **static).compile()
@@ -260,10 +387,26 @@ def compile_all(tasks, max_workers=None):
         Number of threads. If None, one per task, up to the number of CPUs.
         The default is None.
     """
-    todo = {_compile_key(*t): t for t in tasks if _compile_key(*t) not in _COMPILED}
+    todo = {_get_compile_key_(*task_): task_ for task_ in tasks if _get_compile_key_(*task_) not in _COMPILED}
     if len(todo) > 1:
-        with ThreadPoolExecutor(max_workers=max_workers or min(len(todo), os.cpu_count() or 1)) as ex:
-            list(ex.map(lambda t: get_compiled(*t), todo.values()))
+        with ThreadPoolExecutor(max_workers=max_workers or min(len(todo), os.cpu_count() or 1)) as executor:
+            list(executor.map(lambda task_: get_compiled(*task_), todo.values()))
     else:
-        for t in todo.values():
-            get_compiled(*t)
+        for task_ in todo.values():
+            get_compiled(*task_)
+
+
+def clear_cache():
+    """Empty the cache of compiled functions (they are recompiled when needed)."""
+    _COMPILED.clear()
+
+
+def get_ncompiled():
+    """Get the number of compiled functions in the cache.
+
+    Returns
+    -------
+    int
+        Number of compiled (function, shapes, static arguments).
+    """
+    return len(_COMPILED)
