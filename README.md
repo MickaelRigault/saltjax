@@ -1,3 +1,7 @@
+[![PyPI](https://img.shields.io/pypi/v/saltjax.svg?style=flat-square)](https://pypi.org/project/saltjax/)
+[![Documentation Status](https://readthedocs.org/projects/saltjax/badge/?version=latest)](https://saltjax.readthedocs.io/en/latest/?badge=latest)
+[![codecov](https://codecov.io/gh/MickaelRigault/saltjax/branch/main/graph/badge.svg)](https://codecov.io/gh/MickaelRigault/saltjax)
+
 # saltjax
 
 Fast, batched SALT2 / SALT3 lightcurve fitting with [JAX](https://docs.jax.dev), reproducing

@@ -14,6 +14,7 @@ def coverage(session):
     session.install(".[tests]")
     session.run("coverage", "run", "-m", "pytest", *session.posargs)
     session.run("coverage", "report")
+    session.run("coverage", "xml")      # coverage.xml, uploaded to codecov by the CI
 
 
 @nox.session
