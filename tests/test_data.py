@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import sncosmo
 
 from saltjax.tables import build_tables
 from saltjax.data import band_integrals
@@ -7,6 +8,10 @@ from saltjax.effects import get_effects
 from saltjax import data as sjdata
 
 BANDS = ["bessellb", "bessellv", "bessellr"]
+# a near-infrared band out of the SALT2 wavelength range, defined locally (no download)
+NIR_BAND = "saltjax_test_nir"
+sncosmo.register(sncosmo.Bandpass([11_000., 11_500., 13_000., 13_500.], [0., 1., 1., 0.], name=NIR_BAND),
+                 force=True)
 
 
 @pytest.fixture(scope="module")
@@ -66,9 +71,9 @@ def test_select_phase_range(simulation):
 # tests for the func select_covered_points
 def test_select_covered_points_warns(simulation):
     data, targets = simulation
-    tab = build_tables(BANDS + ["2massj"], 0.02, 0.08, dz=1e-3)
+    tab = build_tables(BANDS + [NIR_BAND], 0.02, 0.08, dz=1e-3)
     data = data.copy()
-    data.loc[data.index[:5], "band"] = "2massj"      # out of the SALT2 wavelength range
+    data.loc[data.index[:5], "band"] = NIR_BAND      # out of the SALT2 wavelength range
     position = sjdata.get_target_position(data, list(targets.index))
     effects = get_effects(targets)
     with pytest.warns(UserWarning, match="5 points dropped"):
