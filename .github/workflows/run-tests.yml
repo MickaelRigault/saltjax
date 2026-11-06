@@ -37,3 +37,12 @@ jobs:
       - name: Run tests with pytest & nox
         run: |
           nox -s coverage
+      - name: Upload coverage to Codecov
+        # once is enough; does not fail the tests if codecov is unavailable
+        if: ${{ matrix.python-version == '3.13' }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          disable_search: true      # only coverage.xml, not other files found on the runner
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
