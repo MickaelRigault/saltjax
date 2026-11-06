@@ -16,6 +16,20 @@ The main entry point, directly accessible as ``saltjax.fit_salt``.
 
    fit_salt
 
+The steps of :func:`fit_salt` (``saltjax.fit``), to check or reproduce a fit.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   fit.select_fittable
+   fit.get_initial_theta
+   fit.get_bucket_length
+   fit.get_batches
+   fit.fit_batches
+   fit.get_results_table
+   fit.check_results
+
 The building blocks below live in their submodules (e.g.
 ``saltjax.tables.build_tables``). You do not need them to fit lightcurves, but
 they let you check or reproduce each step of the fit (see
@@ -35,6 +49,24 @@ redshift grid.
    tables.get_tables
    tables.get_salt_source
 
+The steps of :func:`~tables.build_tables`, the SALT surfaces, and the cache.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   tables.Surface
+   tables.load_surfaces
+   tables.check_surface_grids
+   tables.get_modeldir
+   tables.get_band_grids
+   tables.get_max_colorlaw_deviation
+   tables.get_ncolor_terms
+   tables.get_covariance_tables
+   tables.pad_band_grids
+   tables.clear_cache
+   tables.cache_info
+
 Effects (``saltjax.effects``)
 -----------------------------
 
@@ -45,7 +77,10 @@ Propagation effects (dust), as in ``sncosmo.Model`` (see :doc:`/examples/dust`).
    :nosignatures:
 
    effects.get_effects
+   effects.parameter_table
+   effects.get_extinction
    effects.transmission
+   effects.wave_limits
 
 Data (``saltjax.data``)
 -----------------------
@@ -90,9 +125,11 @@ Evaluate the model (fluxes and model covariance) of a target in JAX.
 
    model.get_model_functions
    model.phase_grids
+   model.interpolate_phase
    model.bandflux
    model.rvar_and_cdisp
    kernel.kernel_weights
+   kernel.keys_kernel
 
 Low-level fitter (``saltjax.fitter``)
 -------------------------------------
@@ -108,3 +145,15 @@ The compiled, batched functions used by :func:`fit_salt`.
    fitter.compile_all
    fitter.get_compiled
    fitter.enable_x64
+   fitter.clear_cache
+   fitter.get_ncompiled
+
+Fit of a single target (traced and compiled by :func:`~fitter.fit_batch`).
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   fitter.fit_one
+   fitter.levenberg_marquardt
+   fitter.get_cinv_operator
