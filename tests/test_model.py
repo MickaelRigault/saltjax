@@ -3,7 +3,9 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from saltjax import build_tables, pack_lightcurves, get_model_functions
+from saltjax.tables import build_tables
+from saltjax.data import pack_lightcurves
+from saltjax.model import get_model_functions
 from saltjax.data import LC_KEYS, FIT_KEYS
 
 

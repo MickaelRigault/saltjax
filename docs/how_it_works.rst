@@ -44,7 +44,7 @@ During the fit, the redshift and the parameters of the effects (e.g. :math:`E(B-
 and :math:`R_V` of the Milky Way and of the host) are fixed. So :math:`E(\lambda)` is a
 fixed weight of the band sum, like the bandpass. saltjax computes, for each target,
 the band integrals of the surfaces at its own redshift, with its own transmission
-(:func:`saltjax.band_integrals`), on sncosmo's wavelength grid. This is exact for any
+(:func:`saltjax.data.band_integrals`), on sncosmo's wavelength grid. This is exact for any
 effect that is a transmission in wavelength, whatever its law or frame, and whatever
 the spread of its parameters between targets.
 
