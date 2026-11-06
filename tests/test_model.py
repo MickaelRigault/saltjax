@@ -4,7 +4,7 @@ import pytest
 
 from saltjax.tables import build_tables
 from saltjax.data import pack_lightcurves
-from saltjax.model import get_model_functions
+from saltjax.model import get_model_functions, interpolate_phase
 from saltjax.fitter import enable_x64
 from saltjax.data import LC_KEYS, FIT_KEYS
 
@@ -66,3 +66,15 @@ def test_non_ab_raises(simulation, packed):
     data = data.assign(zpsys="vega")
     with pytest.raises(NotImplementedError):
         pack_lightcurves(data, targets, tab)
+
+
+# tests for the func interpolate_phase
+def test_interpolate_phase_at_nodes():
+    """ at the phase nodes (outside the edge intervals), the table values are returned """
+    nphase = 10
+    table = jnp.arange(2 * nphase, dtype=float).reshape(2, nphase) ** 2   # (nbands, nphase)
+    table_edge = jnp.zeros((2, 4))
+    band = jnp.array([0, 1, 1])
+    phase = jnp.array([3., 5., 7.])
+    values = interpolate_phase(table, table_edge, band, phase, 0., 1., nphase)
+    np.testing.assert_allclose(values, table[band, phase.astype(int)])
