@@ -10,7 +10,7 @@ import jax.numpy as jnp
 from .tables import get_salt_source, get_tables
 from .data import LC_KEYS, FIT_KEYS, pack_lightcurves
 from .model import phase_grids
-from .fitter import fit_batch, initial_batch, compile_all, get_compiled
+from .fitter import fit_batch, initial_batch, compile_all, get_compiled, enable_x64
 
 __all__ = ["fit_salt"]
 
@@ -184,7 +184,7 @@ def fit_salt(data, targets, indexes=None, modelcov=True, phase_range=[-10, 40],
     if verbose:
         print(f"tables: {len(tables['zgrid'])} redshifts, {tables['nc']} color terms")
 
-    with jax.enable_x64(True):
+    with enable_x64(True):
         arr = pack_lightcurves(data, targets, tables, indexes=indexes, phase_range=phase_range,
                                effects=effects, effect_names=effect_names,
                                effect_frames=effect_frames, mwebv_key=mwebv_key,
