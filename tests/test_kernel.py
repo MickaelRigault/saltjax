@@ -1,7 +1,7 @@
 import numpy as np
 import sncosmo
 
-from saltjax.kernel import kernel_weights
+from saltjax.kernel import kernel_weights, keys_kernel
 
 
 def test_kernel_matches_sncosmo_interpolator():
@@ -26,3 +26,17 @@ def test_kernel_weights_properties():
     vals = np.arange(10.) ** 2
     idx, w = kernel_weights(np.arange(10.), 10)
     np.testing.assert_allclose((w * vals[idx]).sum(1), vals)
+
+
+# tests for the func keys_kernel
+def test_keys_kernel():
+    assert keys_kernel(0.) == 1.
+    np.testing.assert_allclose(keys_kernel(np.array([1., 2., -1., 3.5])), 0.)   # 0 at the other nodes
+    np.testing.assert_allclose(keys_kernel(-0.3), keys_kernel(0.3))             # symmetric
+
+
+def test_kernel_weights_is_keys_kernel_inside():
+    """ away from the first and last intervals, the weights are the Keys kernel """
+    u = np.linspace(1.01, 7.99, 50)
+    idx, w = kernel_weights(u, 10)
+    np.testing.assert_allclose(w, keys_kernel(u[:, None] - idx), atol=1e-14)
