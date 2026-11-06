@@ -126,3 +126,47 @@ def test_unregistered_source_needs_modeldir(simulation):
     ref = saltjax.fit_salt(data, targets, modelcov=False, source="salt3", version="2.0")
     np.testing.assert_allclose(res[PARAMS].astype(float), ref.loc[res.index, PARAMS].astype(float),
                                rtol=1e-10)
+
+
+# tests for the steps of fit_salt
+def test_get_bucket_length():
+    assert saltjax.fit.get_bucket_length(3) == 16
+    assert saltjax.fit.get_bucket_length(16) == 16
+    assert saltjax.fit.get_bucket_length(17) == 32
+    assert saltjax.fit.get_bucket_length(100, base=2, minimum=10) == 160
+
+
+def test_fit_steps(simulation):
+    """ the steps put together give the same as fit_salt """
+    from saltjax.tables import get_tables, get_salt_source
+    from saltjax.model import phase_grids
+    from saltjax.fitter import enable_x64
+
+    data, targets = simulation
+    indexes = list(targets.index)
+    tables = get_tables(sorted(data["band"].unique()), get_salt_source("salt2"),
+                        targets["z"].min(), targets["z"].max())
+    with enable_x64(True):
+        packed = saltjax.data.pack_lightcurves(data, targets, tables, indexes=indexes)
+        fittable = saltjax.fit.select_fittable(packed)
+        assert fittable.all()
+        theta_in, scan = saltjax.fit.get_initial_theta(packed, targets.loc[indexes])
+        assert theta_in.shape == (len(indexes), 4)
+        batches = saltjax.fit.get_batches(packed, theta_in, fittable)
+        assert sum(len(batch_[1]) for batch_ in batches) == len(indexes)
+        out = saltjax.fit.fit_batches(batches, phase_grids(tables), len(tables["bands"]), scan=scan)
+    results = saltjax.fit.get_results_table(out, packed, indexes, index_name=targets.index.name)
+    ref = saltjax.fit_salt(data, targets)
+    np.testing.assert_allclose(results[PARAMS].astype(float), ref[PARAMS].astype(float), rtol=1e-12)
+
+
+def test_get_initial_theta_bad_guess(simulation):
+    with pytest.raises(ValueError):
+        saltjax.fit.get_initial_theta({}, None, guess="random")
+
+
+def test_check_results_warns():
+    results = pandas.DataFrame({"c": [0.1, 2.0], "valid": [True, False], "converged": [True, False]})
+    with pytest.warns(UserWarning) as record:
+        saltjax.fit.check_results(results, c_max=1.5, modelcov=True, nrefit=10)
+    assert len(record) == 3
