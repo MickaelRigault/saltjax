@@ -9,7 +9,36 @@ import jax.numpy as jnp
 
 from .model import bandflux, rvar_and_cdisp
 
-__all__ = ["fit_batch", "initial_batch", "compile_all", "get_compiled"]
+__all__ = ["fit_batch", "initial_batch", "compile_all", "get_compiled", "enable_x64"]
+
+
+def enable_x64(enabled=True):
+    """Context manager to enable (or disable) 64-bit precision in JAX.
+
+    Works with any jax version: recent jax provides ``jax.enable_x64``,
+    older jax (e.g. the last versions supporting python 3.10) only
+    ``jax.experimental.enable_x64``.
+
+    Parameters
+    ----------
+    enabled : bool, optional
+        Enable (True) or disable (False) 64-bit precision. The default is True.
+
+    Returns
+    -------
+    contextmanager
+        To be used as ``with enable_x64(): ...``. The flag is thread-local.
+
+    Examples
+    --------
+    >>> with enable_x64():
+    ...     x = jax.numpy.ones(3)  # float64
+    """
+    if hasattr(jax, "enable_x64"):          # recent jax
+        return jax.enable_x64(enabled)
+
+    from jax.experimental import enable_x64 as experimental_enable_x64  # older jax
+    return experimental_enable_x64(enabled)
 
 
 # ================================================================== #
@@ -214,7 +243,7 @@ def get_compiled(fn, args, static):
     """
     key = _compile_key(fn, args, static)
     if key not in _COMPILED:
-        with jax.enable_x64(True):   # the x64 flag is thread-local
+        with enable_x64(True):   # the x64 flag is thread-local
             _COMPILED[key] = fn.lower(*args, **static).compile()
     return _COMPILED[key]
 

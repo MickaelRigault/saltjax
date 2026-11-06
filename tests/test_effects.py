@@ -1,6 +1,5 @@
 import numpy as np
 import pandas
-import jax
 import jax.numpy as jnp
 import pytest
 import sncosmo
@@ -9,6 +8,7 @@ import saltjax
 from saltjax.tables import build_tables
 from saltjax.data import pack_lightcurves
 from saltjax.model import get_model_functions
+from saltjax.fitter import enable_x64
 from saltjax.data import LC_KEYS, FIT_KEYS
 from saltjax.effects import get_effects, transmission
 
@@ -126,7 +126,7 @@ def test_model_with_effects_matches_sncosmo(dusty, case, source):
     effects, names, frames = CASES[case]
     tab = build_tables(sorted(data["band"].unique()), targets["z"].min(), targets["z"].max(),
                        source=source)
-    with jax.enable_x64(True):
+    with enable_x64(True):
         arr = pack_lightcurves(data, targets, tab, phase_range=None, effects=effects,
                                effect_names=names, effect_frames=frames)
         flux, _, mcov = get_model_functions(tab)

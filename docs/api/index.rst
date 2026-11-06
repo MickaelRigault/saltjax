@@ -107,3 +107,4 @@ The compiled, batched functions used by :func:`fit_salt`.
    fitter.initial_batch
    fitter.compile_all
    fitter.get_compiled
+   fitter.enable_x64

@@ -1,11 +1,11 @@
 import numpy as np
-import jax
 import jax.numpy as jnp
 import pytest
 
 from saltjax.tables import build_tables
 from saltjax.data import pack_lightcurves
 from saltjax.model import get_model_functions
+from saltjax.fitter import enable_x64
 from saltjax.data import LC_KEYS, FIT_KEYS
 
 
@@ -13,7 +13,7 @@ def _pack(simulation, source="salt2", version=None):
     data, targets = simulation
     tab = build_tables(sorted(data["band"].unique()), targets["z"].min(), targets["z"].max(),
                        source=source, version=version)
-    with jax.enable_x64(True):
+    with enable_x64(True):
         arr = pack_lightcurves(data, targets, tab, phase_range=None)
     return tab, arr
 
@@ -44,7 +44,7 @@ def test_pack_lightcurves(simulation, packed):
 def test_model_matches_sncosmo_bandfluxcov(simulation, packed, sncosmo_model, source, version):
     data, targets = simulation
     tab, arr = packed if source == "salt2" else _pack(simulation, source, version)
-    with jax.enable_x64(True):
+    with enable_x64(True):
         flux, rcov, mcov = get_model_functions(tab)
         for i, (_, row) in enumerate(targets.iloc[:8].iterrows()):
             d = _target_arrays(arr, i)
