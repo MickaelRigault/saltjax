@@ -198,3 +198,20 @@ def test_effect_wave_range_drops_points(dusty):
                            effects=[RedOnly()], effect_names=["gray"], effect_frames=["obs"])
     np.testing.assert_allclose(res[PARAMS].astype(float), ref.loc[res.index, PARAMS].astype(float),
                                rtol=1e-12)
+
+
+# tests for the func get_extinction
+def test_get_extinction_matches_sncosmo():
+    wave = np.linspace(3000., 9000., 20)
+    params = {"ebv": np.array([0.1, 0.3]), "r_v": np.array([2.5, 3.1])}
+    extinction = saltjax.effects.get_extinction(sncosmo.CCM89Dust(), params, wave)
+    assert extinction.shape == (2, len(wave))
+    for i in range(2):
+        dust = sncosmo.CCM89Dust()
+        dust.set(ebv=params["ebv"][i], r_v=params["r_v"][i])
+        np.testing.assert_allclose(10 ** (-0.4 * extinction[i]), dust.propagate(wave, np.ones(len(wave))),
+                                   rtol=1e-10)
+
+
+def test_get_extinction_other_effect_is_none():
+    assert saltjax.effects.get_extinction(GrayDust(), {"tau": np.array([0.1])}, np.ones(3)) is None
