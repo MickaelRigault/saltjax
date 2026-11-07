@@ -86,7 +86,6 @@ results = saltjax.fit_lc(data, targets, source="nugent-sn2p", **dust)
 ```
 
 Options specific to a source family (e.g. `modelcov` for SALT) raise an error with the other family.
-`saltjax.fit_salt` (SALT only) is still available for existing code.
 
 Check a time-series fit by eye (give the same effects as the fit, if any):
 

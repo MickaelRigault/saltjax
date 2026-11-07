@@ -938,7 +938,7 @@ def fit_timeseries(data, targets, source="hsiao", version=None, indexes=None, ph
 
     effects, effect_names, effect_frames : list or None, optional
         Propagation effects, as in ``sncosmo.Model`` (see
-        :func:`saltjax.fit_salt`). The default is None (Milky Way dust from
+        :func:`saltjax.fit_lc`). The default is None (Milky Way dust from
         `mwebv_key` and `mw_r_v`).
 
     mwebv_key : str or None, optional
@@ -976,7 +976,7 @@ def fit_timeseries(data, targets, source="hsiao", version=None, indexes=None, ph
     ------
     NotImplementedError
         If the source is not an ``sncosmo.TimeSeriesSource`` (use
-        :func:`saltjax.fit_salt` for SALT), or a magnitude system other than
+        :func:`saltjax.fit_lc` for SALT), or a magnitude system other than
         'ab' is used.
 
     ValueError

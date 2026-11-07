@@ -7,7 +7,7 @@ the source and calls the fitter of its family::
     results = saltjax.fit_lc(data, targets, source="salt2")    # SALT2 / SALT3
     results = saltjax.fit_lc(data, targets, source="hsiao")    # time series
 
-- SALT2 / SALT3 sources (e.g. 'salt2', 'salt3'): :func:`saltjax.fit_salt`,
+- SALT2 / SALT3 sources (e.g. 'salt2', 'salt3'): :func:`saltjax.fit.fit_salt`,
   fitting t0, x0, x1 and c.
 - time-series sources (e.g. 'hsiao', 'nugent-sn2p'):
   :func:`saltjax.timeseries.fit_timeseries`, fitting t0 and amplitude.
@@ -78,7 +78,7 @@ def fit_lc(data, targets, source="salt2", version=None, **kwargs):
 
     The source family sets the fitter (see :func:`get_source_kind`):
 
-    - SALT2 / SALT3 (e.g. 'salt2', 'salt3', 'salt3-nir'): :func:`saltjax.fit_salt`,
+    - SALT2 / SALT3 (e.g. 'salt2', 'salt3', 'salt3-nir'): :func:`saltjax.fit.fit_salt`,
       fitting t0, x0, x1 and c (with the SALT model covariance).
     - time series (e.g. 'hsiao', 'nugent-sn1a', 'nugent-sn2p', SNANA templates):
       :func:`saltjax.timeseries.fit_timeseries`, fitting t0 and amplitude.
@@ -105,7 +105,7 @@ def fit_lc(data, targets, source="salt2", version=None, **kwargs):
         `phase_range`, `guess`, `effects`, `effect_names`, `effect_frames`,
         `mwebv_key`, `mw_r_v`, `batch_points`, `minsnr`, `time_key`,
         `progress_bar`. SALT only: e.g. `modelcov`, `c_max`, `nrefit`.
-        Time series only: `t0_offsets`, `niter`. See :func:`saltjax.fit_salt`
+        Time series only: `t0_offsets`, `niter`. See :func:`saltjax.fit.fit_salt`
         and :func:`saltjax.timeseries.fit_timeseries` (also for the defaults,
         e.g. `phase_range`).
 

@@ -29,7 +29,7 @@ def test_get_source_kind_unsupported_raises():
 def test_fit_lc_salt_equals_fit_salt(simulation):
     data, targets = simulation
     results = saltjax.fit_lc(data, targets, source="salt2", modelcov=False)
-    ref = saltjax.fit_salt(data, targets, source="salt2", modelcov=False)
+    ref = saltjax.fit.fit_salt(data, targets, source="salt2", modelcov=False)
     np.testing.assert_allclose(results[["t0", "x0", "x1", "c"]].astype(float),
                                ref[["t0", "x0", "x1", "c"]].astype(float), rtol=1e-12)
 

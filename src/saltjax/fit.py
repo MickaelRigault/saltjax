@@ -1,6 +1,7 @@
 """Batched SALT2 / SALT3 fit of many lightcurves.
 
-:func:`fit_salt` is the entry point of saltjax. Its steps are also available
+:func:`fit_salt` is the SALT2 / SALT3 fitter called by :func:`saltjax.fit_lc`
+for a SALT source. Its steps are also available
 on their own, to check or reproduce a fit: :func:`select_fittable`,
 :func:`get_initial_theta`, :func:`get_bucket_length`, :func:`get_batches`,
 :func:`fit_batches`, :func:`get_results_table` and :func:`check_results`.

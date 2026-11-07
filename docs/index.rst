@@ -102,8 +102,7 @@ The same effects whatever the source, e.g. Milky Way and host dust with per-targ
    template = saltjax.timeseries.TimeSeriesTemplate.from_name("nugent-sn2p")
    template.show_fit(data, results, index=results.index[0], **dust)
 
-See :doc:`examples/dust` and :doc:`examples/timeseries`. :func:`saltjax.fit_salt` (SALT only)
-is still available for existing code.
+See :doc:`examples/dust` and :doc:`examples/timeseries`.
 
 With `skysurvey <https://skysurvey.readthedocs.io>`_, fit a simulated dataset directly:
 
@@ -128,7 +127,7 @@ Where to go next
       :link: sncosmo_users/index
       :link-type: doc
 
-      From ``sncosmo.fit_lc`` to ``saltjax.fit_salt``.
+      From ``sncosmo.fit_lc`` to ``saltjax.fit_lc``.
 
    .. grid-item-card:: :octicon:`gear;1.5em;sd-mr-1` How it works
       :link: how_it_works

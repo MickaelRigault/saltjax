@@ -9,15 +9,13 @@ Top-level API
 -------------
 
 The entry point, directly accessible as ``saltjax.fit_lc``: any supported sncosmo source
-(SALT2 / SALT3 or time series), with any effects. ``saltjax.fit_salt`` (SALT only) is kept
-for existing code.
+(SALT2 / SALT3 or time series), with any effects.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
    fit_lc
-   fit_salt
 
 Source families (``saltjax.sources``): which fitter :func:`fit_lc` uses for a source.
 
@@ -27,13 +25,14 @@ Source families (``saltjax.sources``): which fitter :func:`fit_lc` uses for a so
 
    sources.get_source_kind
 
-The steps of :func:`fit_salt` (``saltjax.fit``, what :func:`fit_lc` calls for a SALT
-source), to check or reproduce a fit.
+SALT2 / SALT3 fit (``saltjax.fit``): what :func:`fit_lc` calls for a SALT source, and its
+steps, to check or reproduce a fit.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
+   fit.fit_salt
    fit.select_fittable
    fit.get_initial_theta
    fit.get_bucket_length
@@ -146,7 +145,7 @@ Evaluate the model (fluxes and model covariance) of a target in JAX.
 Low-level fitter (``saltjax.fitter``)
 -------------------------------------
 
-The compiled, batched functions used by :func:`fit_salt`.
+The compiled, batched functions used by :func:`~fit.fit_salt`.
 
 .. autosummary::
    :toctree: generated/

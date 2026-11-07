@@ -150,7 +150,7 @@ def test_fit_with_host_dust_matches_sncosmo(dusty, modelcov):
     pytest.importorskip("iminuit")
     data, targets = dusty
     effects, names, frames = CASES["ccm89 mw + ccm89 host"]
-    res = saltjax.fit_salt(data, targets, modelcov=modelcov, effects=effects,
+    res = saltjax.fit_lc(data, targets, modelcov=modelcov, effects=effects,
                            effect_names=names, effect_frames=frames)
     for name, row in targets.iloc[:8].iterrows():
         lc = data.xs(name)
@@ -170,8 +170,8 @@ def test_fit_with_host_dust_matches_sncosmo(dusty, modelcov):
 
 def test_mw_shortcuts_equal_effects(dusty):
     data, targets = dusty
-    short = saltjax.fit_salt(data, targets, modelcov=False, mw_r_v=2.5)
-    full = saltjax.fit_salt(data, targets.assign(mwr_v=2.5), modelcov=False,
+    short = saltjax.fit_lc(data, targets, modelcov=False, mw_r_v=2.5)
+    full = saltjax.fit_lc(data, targets.assign(mwr_v=2.5), modelcov=False,
                             effects=[sncosmo.CCM89Dust()], effect_names=["mw"], effect_frames=["obs"])
     np.testing.assert_allclose(short[PARAMS].astype(float), full.loc[short.index, PARAMS].astype(float),
                                rtol=1e-12)
@@ -180,7 +180,7 @@ def test_mw_shortcuts_equal_effects(dusty):
 
 def test_no_effect(dusty):
     data, targets = dusty
-    res = saltjax.fit_salt(data, targets, modelcov=False, effects=[], effect_names=[], effect_frames=[])
+    res = saltjax.fit_lc(data, targets, modelcov=False, effects=[], effect_names=[], effect_frames=[])
     assert not {"mwebv", "mwr_v"} & set(res.columns)
     assert len(res) == len(targets)
 
@@ -192,9 +192,9 @@ def test_effect_wave_range_drops_points(dusty):
         _minwave = 5000.        # cuts bessellb and bessellv in the observer frame
 
     with pytest.warns(UserWarning, match="out of the model wavelength range"):
-        res = saltjax.fit_salt(data, targets, modelcov=False, effects=[RedOnly()],
+        res = saltjax.fit_lc(data, targets, modelcov=False, effects=[RedOnly()],
                                effect_names=["gray"], effect_frames=["obs"])
-    ref = saltjax.fit_salt(data[data["band"] == "bessellr"], targets, modelcov=False,
+    ref = saltjax.fit_lc(data[data["band"] == "bessellr"], targets, modelcov=False,
                            effects=[RedOnly()], effect_names=["gray"], effect_frames=["obs"])
     np.testing.assert_allclose(res[PARAMS].astype(float), ref.loc[res.index, PARAMS].astype(float),
                                rtol=1e-12)
