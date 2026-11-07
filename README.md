@@ -54,6 +54,19 @@ results = saltjax.fit_salt(data, targets,
                            effect_names=["mw", "host"], effect_frames=["obs", "rest"])
 ```
 
+### Time-series templates
+
+Any `sncosmo.TimeSeriesSource` (e.g. `"hsiao"`, `"nugent-sn1a"`, `"nugent-sn2p"`, the SNANA
+core-collapse templates): fits `t0` and `amplitude`, as `sncosmo.fit_lc`.
+
+```python
+results = saltjax.fit_timeseries(data, targets, source="hsiao")
+
+# check a fit by eye
+template = saltjax.timeseries.TimeSeriesTemplate.from_name("hsiao")
+template.show_fit(data, results, index=results.index[0])
+```
+
 `saltjax` is used by [skysurvey](https://github.com/MickaelRigault/skysurvey) through
 `skysurvey.lcfit.fit_salt_jax(dataset)`.
 
@@ -75,8 +88,10 @@ results = saltjax.fit_salt(data, targets,
 
 ## Limitations
 
-* SALT2 and SALT3 sources only (`sncosmo.SALT2Source`, `sncosmo.SALT3Source`, e.g.
-  `"salt2"`, `"salt2-extended"`, `"salt3"`, `"salt3-nir"`).
+* SALT2 and SALT3 sources (`sncosmo.SALT2Source`, `sncosmo.SALT3Source`, e.g.
+  `"salt2"`, `"salt2-extended"`, `"salt3"`, `"salt3-nir"`) with `fit_salt`, and time-series
+  sources (`sncosmo.TimeSeriesSource`, e.g. `"hsiao"`, `"nugent-sn2p"`) with `fit_timeseries`.
+  Other sources (`StretchSource`, `SNEMOSource`, `MLCS2k2Source`, `SUGARSource`) are not supported.
 * Effects (dust) in the observer or rest frame only, with fixed parameters (not fitted); no random scattering
   effects (G10, C11).
 * AB magnitude system only.

@@ -71,6 +71,17 @@ of ``targets``):
 
 See :doc:`examples/dust`.
 
+Time-series templates: any ``sncosmo.TimeSeriesSource`` (e.g. ``"hsiao"``, ``"nugent-sn2p"``,
+the SNANA core-collapse templates), fitting ``t0`` and ``amplitude``:
+
+.. code-block:: python
+
+   results = saltjax.fit_timeseries(data, targets, source="hsiao")
+
+   # check a fit by eye
+   template = saltjax.timeseries.TimeSeriesTemplate.from_name("hsiao")
+   template.show_fit(data, results, index=results.index[0])
+
 With `skysurvey <https://skysurvey.readthedocs.io>`_, fit a simulated dataset directly:
 
 .. code-block:: python

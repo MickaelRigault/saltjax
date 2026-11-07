@@ -8,13 +8,15 @@ API reference
 Top-level API
 -------------
 
-The main entry point, directly accessible as ``saltjax.fit_salt``.
+The main entry points, directly accessible as ``saltjax.fit_salt`` (SALT2 / SALT3) and
+``saltjax.fit_timeseries`` (time-series templates).
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
    fit_salt
+   fit_timeseries
 
 The steps of :func:`fit_salt` (``saltjax.fit``), to check or reproduce a fit.
 
@@ -157,3 +159,34 @@ Fit of a single target (traced and compiled by :func:`~fitter.fit_batch`).
    fitter.fit_one
    fitter.levenberg_marquardt
    fitter.get_cinv_operator
+
+Time-series templates (``saltjax.timeseries``)
+-----------------------------------------------
+
+Fit of any ``sncosmo.TimeSeriesSource`` (see :func:`fit_timeseries`).
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   timeseries.TimeSeriesTemplate
+
+The steps of :func:`fit_timeseries`, to check or reproduce a fit.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   timeseries.get_bspline_weights
+   timeseries.get_timeseries_tables
+   timeseries.get_band_integrals
+   timeseries.pack_timeseries
+   timeseries.timeseries_bandflux
+   timeseries.select_fittable
+   timeseries.get_initial_t0
+   timeseries.get_timeseries_batches
+   timeseries.fit_timeseries_batches
+   timeseries.get_results_table
+   timeseries.fit_timeseries_one
+   timeseries.fit_timeseries_batch
+   timeseries.initial_timeseries_batch
