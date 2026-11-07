@@ -76,7 +76,7 @@ instead of a sum over hundreds of wavelengths.
 Time-series templates
 ---------------------
 
-:func:`saltjax.fit_timeseries` uses the same idea for any ``sncosmo.TimeSeriesSource``
+:func:`saltjax.fit_lc` uses the same idea for any ``sncosmo.TimeSeriesSource``
 (e.g. ``"hsiao"``, ``"nugent-sn2p"``). Its flux is :math:`A\,F(p, \lambda)`, with
 :math:`A` the amplitude and :math:`F` the template, interpolated by sncosmo with a
 tensor-product spline (``scipy.interpolate.RectBivariateSpline``, cubic in wavelength,
@@ -165,17 +165,15 @@ Scope and limitations
 
 * SALT2 and SALT3 sources (``sncosmo.SALT2Source`` and ``sncosmo.SALT3Source``),
   given by name with ``source=`` (and ``version=``): ``"salt2"``, ``"salt2-extended"``,
-  ``"salt2-h17"``, ``"salt3"``, ``"salt3-nir"``, ... with :func:`saltjax.fit_salt`.
+  ``"salt2-h17"``, ``"salt3"``, ``"salt3-nir"``, ...
 * Time-series sources (``sncosmo.TimeSeriesSource``): ``"hsiao"``, ``"nugent-sn1a"``,
-  ``"nugent-sn2p"``, the SNANA core-collapse templates, ... with
-  :func:`saltjax.fit_timeseries`.
+  ``"nugent-sn2p"``, the SNANA core-collapse templates, ...
 * Propagation effects, as in ``sncosmo.Model`` (``effects``, ``effect_names``,
   ``effect_frames``), in the ``"obs"`` and ``"rest"`` frames: all sncosmo dust laws
   (``CCM89Dust``, ``OD94Dust``, ``F99Dust``) and any user-defined
   ``sncosmo.PropagationEffect`` that is a transmission in wavelength. Their parameters
   are fixed per target (columns ``{name}{param}`` of ``targets``, e.g. ``mwebv``,
-  ``hostebv``, ``hostr_v``). With both :func:`saltjax.fit_salt` and
-  :func:`saltjax.fit_timeseries`. See :doc:`examples/dust`.
+  ``hostebv``, ``hostr_v``), for both source families. See :doc:`examples/dust`.
 * AB zero points.
 * :math:`t_0, x_0, x_1, c` (SALT) or :math:`t_0, A` (time series) free; redshift and
   effect parameters fixed.

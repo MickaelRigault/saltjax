@@ -102,7 +102,7 @@ def test_template_flux_matches_sncosmo(degree, zero_before):
 
 
 def test_template_unsupported_source_raises():
-    with pytest.raises(NotImplementedError, match="fit_salt"):
+    with pytest.raises(NotImplementedError, match="fit_lc"):
         timeseries.TimeSeriesTemplate.from_source(sncosmo.get_source("salt2"))
     stretch = sncosmo.StretchSource(np.linspace(0, 10, 11), np.linspace(3000, 9000, 61), np.ones((11, 61)))
     with pytest.raises(NotImplementedError):
@@ -190,8 +190,8 @@ def test_fit_plateau_observed_late():
                                      "flux": flux + rng.normal(0, fluxerr), "fluxerr": fluxerr}))
     data = pandas.concat(lcs, keys=targets.index, names=["index", "index_obs"])
 
-    from_data = saltjax.fit_timeseries(data, targets, source=plateau)
-    from_truth = saltjax.fit_timeseries(data, targets, source=plateau, guess="truth")
+    from_data = timeseries.fit_timeseries(data, targets, source=plateau)
+    from_truth = timeseries.fit_timeseries(data, targets, source=plateau, guess="truth")
     np.testing.assert_allclose(from_data["chi2"], from_truth["chi2"], rtol=1e-6)
     assert ((from_data["t0"] - targets["t0"]).abs() / from_data["t0_err"]).max() < 5
 
@@ -200,7 +200,7 @@ def test_fit_plateau_observed_late():
 def test_fit_matches_sncosmo(source, simulation):
     pytest.importorskip("iminuit")
     data, targets = simulation
-    results = saltjax.fit_timeseries(data, targets, source=source)
+    results = timeseries.fit_timeseries(data, targets, source=source)
     for index_, row in targets.iterrows():
         model = sncosmo.Model(source, effects=[sncosmo.CCM89Dust()], effect_names=["mw"], effect_frames=["obs"])
         model.set(z=row["z"], t0=row["t0"], amplitude=row["amplitude"], mwebv=row["mwebv"])
@@ -215,7 +215,7 @@ def test_fit_matches_sncosmo(source, simulation):
 
 def test_fit_output(source, simulation):
     data, targets = simulation
-    results = saltjax.fit_timeseries(data, targets, source=source)
+    results = timeseries.fit_timeseries(data, targets, source=source)
     assert list(results.index) == list(targets.index)
     for column_ in ["t0", "amplitude", "t0_err", "amplitude_err", "cov_t0amplitude", "z", "mwebv",
                     "chi2", "ndof", "valid"]:
@@ -231,9 +231,9 @@ def test_fit_inputs_are_equivalent(source, simulation):
     """ source as a template, an instance, and guess='truth' give the same fit """
     data, targets = simulation
     template = timeseries.TimeSeriesTemplate.from_source(source)
-    ref = saltjax.fit_timeseries(data, targets, source=source)
+    ref = timeseries.fit_timeseries(data, targets, source=source)
     for kwargs in [dict(source=template), dict(source=source, guess="truth")]:
-        res = saltjax.fit_timeseries(data, targets, **kwargs)
+        res = timeseries.fit_timeseries(data, targets, **kwargs)
         np.testing.assert_allclose(res[["t0", "amplitude"]], ref[["t0", "amplitude"]], rtol=1e-6)
 
 
@@ -242,13 +242,13 @@ def test_fit_warns_and_raises(source, simulation):
     faint = data.copy()
     faint.loc[0, "flux"] = faint.loc[0, "flux"].to_numpy() * 1e-6       # no detection
     with pytest.warns(UserWarning, match="not fitted"):
-        results = saltjax.fit_timeseries(faint, targets, source=source)
+        results = timeseries.fit_timeseries(faint, targets, source=source)
     assert 0 not in results.index
 
     with pytest.raises(ValueError):
-        saltjax.fit_timeseries(data, targets, source=source, guess="random")
+        timeseries.fit_timeseries(data, targets, source=source, guess="random")
     with pytest.raises(NotImplementedError):
-        saltjax.fit_timeseries(data, targets, source="salt2")
+        timeseries.fit_timeseries(data, targets, source="salt2")
 
 
 # tests for the plots
@@ -257,14 +257,14 @@ def test_show(source, simulation):
     matplotlib.use("Agg")
     data, targets = simulation
     template = timeseries.TimeSeriesTemplate.from_source(source)
-    results = saltjax.fit_timeseries(data, targets, source=template)
+    results = timeseries.fit_timeseries(data, targets, source=template)
     assert isinstance(template.show(), matplotlib.figure.Figure)
     assert isinstance(template.show_fit(data, results, index=0), matplotlib.figure.Figure)
 
     # with effects: the same as the fit, else a warning
     dust = dict(effects=[sncosmo.CCM89Dust(), sncosmo.CCM89Dust()], effect_names=["mw", "host"],
                 effect_frames=["obs", "rest"])
-    results = saltjax.fit_timeseries(data, targets.assign(hostebv=0.1), source=template, **dust)
+    results = timeseries.fit_timeseries(data, targets.assign(hostebv=0.1), source=template, **dust)
     assert isinstance(template.show_fit(data, results, index=0, **dust), matplotlib.figure.Figure)
     with pytest.warns(UserWarning, match="not in the model"):
         template.show_fit(data, results, index=0)

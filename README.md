@@ -4,11 +4,12 @@
 
 # saltjax
 
-Fast, batched SALT2 / SALT3 lightcurve fitting with [JAX](https://docs.jax.dev), reproducing
-[sncosmo](https://sncosmo.readthedocs.io)'s `fit_lc`.
+Fast, batched lightcurve fitting with [JAX](https://docs.jax.dev), reproducing
+[sncosmo](https://sncosmo.readthedocs.io)'s `fit_lc`, for SALT2 / SALT3 and any time-series source.
 
-`saltjax` fits SALT2 or SALT3 to thousands of lightcurves at once. It uses the same model as sncosmo
-(same interpolation kernel, model covariance and dust), and gives the same parameters and errors
+`saltjax.fit_lc` fits thousands of lightcurves at once with any SALT2, SALT3 or time-series sncosmo source
+(e.g. `"salt2"`, `"salt3"`, `"hsiao"`, `"nugent-sn2p"`), with any sncosmo dust. It uses the same model as sncosmo
+(same interpolation, model covariance and dust), and gives the same parameters and errors
 (to ~1e-2 sigma at worst), much faster.
 
 ## Speed
@@ -33,14 +34,15 @@ pip install saltjax
 
 ## What can be fitted
 
-Any combination of a **source** and **effects** supported by sncosmo below:
+One function, `saltjax.fit_lc`, for any combination of a **source** and **effects** supported by sncosmo below.
+The source (a name or an instance) sets what is fitted:
 
-| Source (sncosmo) | Function | Fitted parameters |
-|---|---|---|
-| any SALT2 or SALT3 source: `"salt2"`, `"salt2-extended"`, `"salt2-h17"`, `"salt3"`, `"salt3-nir"`… | `saltjax.fit_salt` | `t0`, `x0`, `x1`, `c` (+ model covariance) |
-| any time-series source (`sncosmo.TimeSeriesSource`): `"hsiao"`, `"nugent-sn1a"`, `"nugent-sn2p"`, the SNANA core-collapse templates… | `saltjax.fit_timeseries` | `t0`, `amplitude` |
+| Source (sncosmo) | Fitted parameters |
+|---|---|
+| any SALT2 or SALT3 source: `"salt2"`, `"salt2-extended"`, `"salt2-h17"`, `"salt3"`, `"salt3-nir"`… | `t0`, `x0`, `x1`, `c` (+ model covariance) |
+| any time-series source (`sncosmo.TimeSeriesSource`): `"hsiao"`, `"nugent-sn1a"`, `"nugent-sn2p"`, the SNANA core-collapse templates… | `t0`, `amplitude` |
 
-**Effects**, with both functions, given as in `sncosmo.Model` (`effects`, `effect_names`, `effect_frames`):
+**Effects**, for any source, given as in `sncosmo.Model` (`effects`, `effect_names`, `effect_frames`):
 
 * any sncosmo dust law (`CCM89Dust`, `OD94Dust`, `F99Dust`), or any user-defined `sncosmo.PropagationEffect`
   that is a deterministic transmission in wavelength;
@@ -57,20 +59,20 @@ import saltjax
 
 # data: lightcurves, indexed by (target, observation), with columns
 #       time (or mjd), band, flux, fluxerr, zp [, zpsys]
-# targets: one row per target with z [, t0, x1, c, mwebv]
-results = saltjax.fit_salt(data, targets, modelcov=True, progress_bar=True)
+# targets: one row per target with z [, t0, mwebv]
+results = saltjax.fit_lc(data, targets, source="salt2", modelcov=True, progress_bar=True)
 results[["t0", "x0", "x1", "c", "t0_err", "x0_err", "x1_err", "c_err"]]
 
 # any SALT2 or SALT3 source registered in sncosmo
-results = saltjax.fit_salt(data, targets, source="salt3")
-results = saltjax.fit_salt(data, targets, source="salt2", version="T23")
+results = saltjax.fit_lc(data, targets, source="salt3")
+results = saltjax.fit_lc(data, targets, source="salt2", version="T23")
 
 # any time-series source: fits t0 and amplitude
-results = saltjax.fit_timeseries(data, targets, source="hsiao")
-results = saltjax.fit_timeseries(data, targets, source="nugent-sn2p")
+results = saltjax.fit_lc(data, targets, source="hsiao")
+results = saltjax.fit_lc(data, targets, source="nugent-sn2p")
 ```
 
-With effects, the same arguments for both functions, e.g. Milky Way and host dust whose parameters are read per
+With effects, the same arguments whatever the source, e.g. Milky Way and host dust whose parameters are read per
 target from the columns `mwebv`, `hostebv` and `hostr_v` of `targets`:
 
 ```python
@@ -79,9 +81,12 @@ import sncosmo
 dust = dict(effects=[sncosmo.CCM89Dust(), sncosmo.F99Dust(r_v=2.0)],
             effect_names=["mw", "host"], effect_frames=["obs", "rest"])
 
-results = saltjax.fit_salt(data, targets, source="salt3", **dust)
-results = saltjax.fit_timeseries(data, targets, source="nugent-sn2p", **dust)
+results = saltjax.fit_lc(data, targets, source="salt3", **dust)
+results = saltjax.fit_lc(data, targets, source="nugent-sn2p", **dust)
 ```
+
+Options specific to a source family (e.g. `modelcov` for SALT) raise an error with the other family.
+`saltjax.fit_salt` (SALT only) is still available for existing code.
 
 Check a time-series fit by eye (give the same effects as the fit, if any):
 
@@ -115,8 +120,8 @@ template.show_fit(data, results, index=results.index[0], **dust)
 ## Limitations
 
 * SALT2 and SALT3 sources (`sncosmo.SALT2Source`, `sncosmo.SALT3Source`, e.g.
-  `"salt2"`, `"salt2-extended"`, `"salt3"`, `"salt3-nir"`) with `fit_salt`, and time-series
-  sources (`sncosmo.TimeSeriesSource`, e.g. `"hsiao"`, `"nugent-sn2p"`) with `fit_timeseries`.
+  `"salt2"`, `"salt2-extended"`, `"salt3"`, `"salt3-nir"`) and time-series
+  sources (`sncosmo.TimeSeriesSource`, e.g. `"hsiao"`, `"nugent-sn2p"`).
   Other sources (`StretchSource`, `SNEMOSource`, `MLCS2k2Source`, `SUGARSource`) are not supported.
 * Effects (dust) in the observer or rest frame only, with fixed parameters (not fitted); no random scattering
   effects (G10, C11).

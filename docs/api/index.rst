@@ -8,17 +8,27 @@ API reference
 Top-level API
 -------------
 
-The main entry points, directly accessible as ``saltjax.fit_salt`` (SALT2 / SALT3) and
-``saltjax.fit_timeseries`` (time-series templates).
+The entry point, directly accessible as ``saltjax.fit_lc``: any supported sncosmo source
+(SALT2 / SALT3 or time series), with any effects. ``saltjax.fit_salt`` (SALT only) is kept
+for existing code.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
+   fit_lc
    fit_salt
-   fit_timeseries
 
-The steps of :func:`fit_salt` (``saltjax.fit``), to check or reproduce a fit.
+Source families (``saltjax.sources``): which fitter :func:`fit_lc` uses for a source.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   sources.get_source_kind
+
+The steps of :func:`fit_salt` (``saltjax.fit``, what :func:`fit_lc` calls for a SALT
+source), to check or reproduce a fit.
 
 .. autosummary::
    :toctree: generated/
@@ -163,15 +173,16 @@ Fit of a single target (traced and compiled by :func:`~fitter.fit_batch`).
 Time-series templates (``saltjax.timeseries``)
 -----------------------------------------------
 
-Fit of any ``sncosmo.TimeSeriesSource`` (see :func:`fit_timeseries`).
+Fit of any ``sncosmo.TimeSeriesSource``: what :func:`fit_lc` calls for a time-series source.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
+   timeseries.fit_timeseries
    timeseries.TimeSeriesTemplate
 
-The steps of :func:`fit_timeseries`, to check or reproduce a fit.
+The steps of :func:`~timeseries.fit_timeseries`, to check or reproduce a fit.
 
 .. autosummary::
    :toctree: generated/

@@ -1,24 +1,28 @@
-"""Fast batched SALT2 / SALT3 lightcurve fitting with JAX, reproducing sncosmo.
+"""Fast batched lightcurve fitting with JAX, reproducing sncosmo's ``fit_lc``.
 
-The entry points are :func:`saltjax.fit_salt` (SALT2 / SALT3) and
-:func:`saltjax.fit_timeseries` (time-series templates, e.g. 'hsiao')::
+The entry point is :func:`saltjax.fit_lc`: give it the lightcurves, the targets
+and any supported sncosmo source, by name or instance::
 
     import saltjax
-    results = saltjax.fit_salt(data, targets)
-    results = saltjax.fit_timeseries(data, targets, source="hsiao")
+    results = saltjax.fit_lc(data, targets, source="salt2")   # SALT2 / SALT3: t0, x0, x1, c
+    results = saltjax.fit_lc(data, targets, source="hsiao")   # time series: t0, amplitude
 
-The building blocks are in the submodules: `saltjax.tables` (model tables),
-`saltjax.effects` (dust), `saltjax.data` (packed lightcurves and band
-integrals), `saltjax.model` (model fluxes and covariance in JAX),
-`saltjax.kernel` (interpolation kernel), `saltjax.fitter` (compiled fit) and
-`saltjax.timeseries` (time-series templates).
+with any sncosmo dust (``effects``, ``effect_names``, ``effect_frames``), as in
+``sncosmo.Model``. :func:`saltjax.fit_salt` (SALT only) is kept at the top
+level for existing code.
+
+The building blocks are in the submodules: `saltjax.sources` (source families),
+`saltjax.tables` (SALT tables), `saltjax.effects` (dust), `saltjax.data` (packed
+lightcurves and band integrals), `saltjax.model` (SALT model in JAX),
+`saltjax.kernel` (interpolation kernel), `saltjax.fitter` (compiled SALT fit)
+and `saltjax.timeseries` (time-series templates and their fit).
 """
 
 __version__ = "0.3.0"
 
 # Top-level API: what users are expected to call
-from .fit import fit_salt # noqa: F401, E402
-from .timeseries import fit_timeseries # noqa: F401, E402
+from .sources import fit_lc # noqa: F401, E402
+from .fit import fit_salt # noqa: F401, E402  (SALT only, kept for existing code)
 
 # Submodules, e.g. saltjax.tables.build_tables
-from . import kernel, tables, effects, data, model, fitter, timeseries # noqa: F401, E402
+from . import kernel, tables, effects, data, model, fitter, timeseries, sources # noqa: F401, E402

@@ -3,10 +3,11 @@
 Most sncosmo sources are time series: a spectral template F(phase, wave)
 scaled by an amplitude (e.g. 'hsiao', 'nugent-sn2p', the SNANA core-collapse
 templates). :func:`fit_timeseries` fits (t0, amplitude) on many lightcurves at
-once, reproducing ``sncosmo.fit_lc``::
+once, reproducing ``sncosmo.fit_lc``. It is what :func:`saltjax.fit_lc` calls for
+a time-series source::
 
     import saltjax
-    results = saltjax.fit_timeseries(data, targets, source="hsiao")
+    results = saltjax.fit_lc(data, targets, source="hsiao")
 
 How it works (as for SALT, see :mod:`saltjax.fit`): sncosmo interpolates the
 template with a tensor-product spline (``scipy.interpolate.RectBivariateSpline``),
@@ -119,7 +120,7 @@ class TimeSeriesTemplate:
             which may change the flux, are not supported either).
         """
         if type(source) is not sncosmo.TimeSeriesSource:
-            hint = (" Use saltjax.fit_salt for SALT sources."
+            hint = (" Use saltjax.fit_lc, which fits any supported source."
                     if isinstance(source, (sncosmo.SALT2Source, sncosmo.SALT3Source)) else "")
             raise NotImplementedError("only sncosmo.TimeSeriesSource is supported, "
                                       f"got {type(source).__name__}.{hint}")
