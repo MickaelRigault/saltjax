@@ -73,6 +73,35 @@ only approximation:** model covariances differ from sncosmo's by about
 Evaluating the model during the fit therefore costs a few operations per point
 instead of a sum over hundreds of wavelengths.
 
+Time-series templates
+---------------------
+
+:func:`saltjax.fit_lc` uses the same idea for any ``sncosmo.TimeSeriesSource``
+(e.g. ``"hsiao"``, ``"nugent-sn2p"``). Its flux is :math:`A\,F(p, \lambda)`, with
+:math:`A` the amplitude and :math:`F` the template, interpolated by sncosmo with a
+tensor-product spline (``scipy.interpolate.RectBivariateSpline``, cubic in wavelength,
+cubic or linear in phase):
+
+.. math::
+
+   F(p, \lambda) = \sum_i B_i(p)\,S_i(\lambda)
+
+with :math:`B_i` the phase B-spline basis and :math:`S_i` a spline in wavelength. The
+band sum is linear in :math:`F`, so saltjax computes, for each target (at its redshift,
+with its effects), the band integral :math:`G_i` of each :math:`S_i`, and the band flux at
+any phase is
+
+.. math::
+
+   F_b(t) = A \sum_i B_i(p)\,G_{b,i}
+
+where only a few :math:`B_i(p)` are non-zero (the spline degree plus one). As in sncosmo
+(FITPACK), the template is constant outside its phase range (its edge values), or zero
+before its first phase if the source has ``zero_before``. Model fluxes equal sncosmo's to
+machine precision. Time-series sources have no model covariance (in sncosmo, only SALT
+sources do); :math:`t_0` and :math:`A` are fitted, starting from a scan in :math:`t_0`
+with :math:`A` solved linearly. See :doc:`examples/timeseries`.
+
 The fit
 -------
 
@@ -137,17 +166,22 @@ Scope and limitations
 * SALT2 and SALT3 sources (``sncosmo.SALT2Source`` and ``sncosmo.SALT3Source``),
   given by name with ``source=`` (and ``version=``): ``"salt2"``, ``"salt2-extended"``,
   ``"salt2-h17"``, ``"salt3"``, ``"salt3-nir"``, ...
+* Time-series sources (``sncosmo.TimeSeriesSource``): ``"hsiao"``, ``"nugent-sn1a"``,
+  ``"nugent-sn2p"``, the SNANA core-collapse templates, ...
 * Propagation effects, as in ``sncosmo.Model`` (``effects``, ``effect_names``,
   ``effect_frames``), in the ``"obs"`` and ``"rest"`` frames: all sncosmo dust laws
   (``CCM89Dust``, ``OD94Dust``, ``F99Dust``) and any user-defined
   ``sncosmo.PropagationEffect`` that is a transmission in wavelength. Their parameters
   are fixed per target (columns ``{name}{param}`` of ``targets``, e.g. ``mwebv``,
-  ``hostebv``, ``hostr_v``). See :doc:`examples/dust`.
+  ``hostebv``, ``hostr_v``), for both source families. See :doc:`examples/dust`.
 * AB zero points.
-* :math:`t_0, x_0, x_1, c` free; redshift and effect parameters fixed.
+* :math:`t_0, x_0, x_1, c` (SALT) or :math:`t_0, A` (time series) free; redshift and
+  effect parameters fixed.
 
 **Not supported (yet):**
 
+* Other sncosmo sources (``StretchSource``, ``SNEMOSource``, ``MLCS2k2Source``,
+  ``SUGARSource``).
 * Fitting the parameters of the effects (e.g. host :math:`E(B-V)`).
 * The ``"free"`` effect frame, random scattering effects (``G10``, ``C11``) and
   phase-dependent effects.

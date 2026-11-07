@@ -20,6 +20,13 @@ Complete, executed notebooks. Download one (button at the top of each page) and 
       Milky Way and host dust with any sncosmo dust law, per-target :math:`E(B-V)`
       and :math:`R_V`, user-defined effects, compared with sncosmo.
 
+   .. grid-item-card:: :octicon:`graph;1.5em;sd-mr-1` Time-series templates
+      :link: timeseries
+      :link-type: doc
+
+      Any ``sncosmo.TimeSeriesSource`` (Hsiao, Nugent, SNANA templates) with
+      Milky Way and host dust: fits, comparison with sncosmo, speed.
+
    .. grid-item-card:: :octicon:`stopwatch;1.5em;sd-mr-1` Speed: saltjax vs sncosmo
       :link: speed
       :link-type: doc
@@ -33,4 +40,5 @@ Complete, executed notebooks. Download one (button at the top of each page) and 
 
    validation
    dust
+   timeseries
    speed

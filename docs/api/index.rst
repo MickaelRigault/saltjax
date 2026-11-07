@@ -8,20 +8,31 @@ API reference
 Top-level API
 -------------
 
-The main entry point, directly accessible as ``saltjax.fit_salt``.
+The entry point, directly accessible as ``saltjax.fit_lc``: any supported sncosmo source
+(SALT2 / SALT3 or time series), with any effects.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   fit_salt
+   fit_lc
 
-The steps of :func:`fit_salt` (``saltjax.fit``), to check or reproduce a fit.
+Source families (``saltjax.sources``): which fitter :func:`fit_lc` uses for a source.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
+   sources.get_source_kind
+
+SALT2 / SALT3 fit (``saltjax.fit``): what :func:`fit_lc` calls for a SALT source, and its
+steps, to check or reproduce a fit.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   fit.fit_salt
    fit.select_fittable
    fit.get_initial_theta
    fit.get_bucket_length
@@ -134,7 +145,7 @@ Evaluate the model (fluxes and model covariance) of a target in JAX.
 Low-level fitter (``saltjax.fitter``)
 -------------------------------------
 
-The compiled, batched functions used by :func:`fit_salt`.
+The compiled, batched functions used by :func:`~fit.fit_salt`.
 
 .. autosummary::
    :toctree: generated/
@@ -157,3 +168,36 @@ Fit of a single target (traced and compiled by :func:`~fitter.fit_batch`).
    fitter.fit_one
    fitter.levenberg_marquardt
    fitter.get_cinv_operator
+
+Time-series templates (``saltjax.timeseries``)
+-----------------------------------------------
+
+Fit of any ``sncosmo.TimeSeriesSource``: what :func:`fit_lc` calls for a time-series source.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   timeseries.fit_timeseries
+   timeseries.TimeSeriesTemplate
+
+The steps of :func:`~timeseries.fit_timeseries`, to check or reproduce a fit.
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   timeseries.get_bspline_weights
+   timeseries.get_timeseries_tables
+   timeseries.get_band_integrals
+   timeseries.pack_timeseries
+   timeseries.timeseries_bandflux
+   timeseries.select_fittable
+   timeseries.get_initial_t0
+   timeseries.get_t0_offsets
+   timeseries.get_timeseries_batches
+   timeseries.fit_timeseries_batches
+   timeseries.get_results_table
+   timeseries.fit_timeseries_one
+   timeseries.fit_timeseries_batch
+   timeseries.initial_timeseries_batch

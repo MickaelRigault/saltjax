@@ -30,7 +30,7 @@ model. saltjax fits *all* lightcurves in one call, from two :class:`pandas.DataF
    targets = pandas.DataFrame([{"z": lc.meta["z"], "mwebv": lc.meta.get("mwebv", 0)}
                                for lc in lcs])
 
-   results = saltjax.fit_salt(data, targets, phase_range=None)
+   results = saltjax.fit_lc(data, targets, phase_range=None)
 
 The notebook below shows the full conversion, and compares saltjax with
 ``sncosmo.fit_lc`` on the same lightcurves.
@@ -43,7 +43,7 @@ Translation table
    :widths: 35 65
 
    * - ``sncosmo.fit_lc``
-     - ``saltjax.fit_salt``
+     - ``saltjax.fit_lc``
    * - ``data`` (one Table)
      - ``data`` (all lightcurves) and ``targets`` (z, mwebv, ...)
    * - ``model=sncosmo.Model("salt2")``

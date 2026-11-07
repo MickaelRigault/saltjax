@@ -1,10 +1,11 @@
-saltjax: fast SALT2 / SALT3 fits with JAX
-=========================================
+saltjax: fast lightcurve fits with JAX
+======================================
 
-**saltjax** fits the SALT2 or SALT3 supernova model to thousands of lightcurves at once with
-`JAX <https://docs.jax.dev>`_. It reproduces `sncosmo <https://sncosmo.readthedocs.io>`_'s
-``fit_lc``: same model, same :math:`\chi^2`, same model covariance and the same dust
-(any sncosmo dust law, Milky Way and host), and the same parameters and errors, much faster.
+**saltjax** fits thousands of lightcurves at once with `JAX <https://docs.jax.dev>`_, with any
+SALT2, SALT3 or time-series supernova model. Its :func:`saltjax.fit_lc` reproduces
+`sncosmo <https://sncosmo.readthedocs.io>`_'s ``fit_lc``: same model, same :math:`\chi^2`,
+same model covariance and the same dust (any sncosmo dust law, Milky Way and host), and the
+same parameters and errors, much faster.
 
 .. grid:: 1 2 3 3
    :gutter: 3
@@ -44,6 +45,31 @@ Installation
 
 See :doc:`installation` for details.
 
+What can be fitted
+------------------
+
+One function, :func:`saltjax.fit_lc`, for any combination of a **source** and **effects**
+supported by sncosmo below. The source (a name or an instance) sets what is fitted:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 60 40
+
+   * - Source (sncosmo)
+     - Fitted parameters
+   * - any SALT2 or SALT3 source: ``"salt2"``, ``"salt2-extended"``, ``"salt3"``, ``"salt3-nir"``…
+     - ``t0``, ``x0``, ``x1``, ``c`` (+ model covariance)
+   * - any time-series source (``sncosmo.TimeSeriesSource``): ``"hsiao"``, ``"nugent-sn1a"``,
+       ``"nugent-sn2p"``, the SNANA core-collapse templates…
+     - ``t0``, ``amplitude``
+
+**Effects**, for any source, given as in ``sncosmo.Model`` (``effects``, ``effect_names``,
+``effect_frames``): any sncosmo dust law (``CCM89Dust``, ``OD94Dust``, ``F99Dust``) or any user-defined
+``sncosmo.PropagationEffect`` that is a deterministic transmission, in the observer (``"obs"``) or rest
+(``"rest"``) frame, with parameters set **per target** from the columns ``{name}{param}`` of ``targets``
+(e.g. ``mwebv``, ``hostebv``, ``hostr_v``). They are fixed during the fit. By default, Milky Way CCM89
+dust is applied from the ``mwebv`` column, if present.
+
 In one call
 -----------
 
@@ -53,23 +79,30 @@ In one call
 
    # data:    lightcurves, indexed by (target, observation), with columns
    #          time (or mjd), band, flux, fluxerr, zp [, zpsys]
-   # targets: one row per target with z [, t0, x1, c, mwebv]
-   results = saltjax.fit_salt(data, targets, modelcov=True, progress_bar=True)
+   # targets: one row per target with z [, t0, mwebv]
+   results = saltjax.fit_lc(data, targets, source="salt2", modelcov=True, progress_bar=True)
    results[["t0", "x0", "x1", "c", "x1_err", "c_err", "chi2", "ndof"]]
 
-Any SALT2 or SALT3 source of sncosmo, and any sncosmo dust, e.g. Milky Way and host dust
-with per-target :math:`E(B-V)` and :math:`R_V` (columns ``mwebv``, ``hostebv``, ``hostr_v``
-of ``targets``):
+   # any time-series source: fits t0 and amplitude
+   results = saltjax.fit_lc(data, targets, source="hsiao")
+
+The same effects whatever the source, e.g. Milky Way and host dust with per-target
+:math:`E(B-V)` and :math:`R_V` (columns ``mwebv``, ``hostebv``, ``hostr_v`` of ``targets``):
 
 .. code-block:: python
 
    import sncosmo
 
-   results = saltjax.fit_salt(data, targets, source="salt3",
-                              effects=[sncosmo.CCM89Dust(), sncosmo.CCM89Dust()],
-                              effect_names=["mw", "host"], effect_frames=["obs", "rest"])
+   dust = dict(effects=[sncosmo.CCM89Dust(), sncosmo.CCM89Dust()],
+               effect_names=["mw", "host"], effect_frames=["obs", "rest"])
+   results = saltjax.fit_lc(data, targets, source="salt3", **dust)
+   results = saltjax.fit_lc(data, targets, source="nugent-sn2p", **dust)
 
-See :doc:`examples/dust`.
+   # check a time-series fit by eye (with the same effects as the fit)
+   template = saltjax.timeseries.TimeSeriesTemplate.from_name("nugent-sn2p")
+   template.show_fit(data, results, index=results.index[0], **dust)
+
+See :doc:`examples/dust` and :doc:`examples/timeseries`.
 
 With `skysurvey <https://skysurvey.readthedocs.io>`_, fit a simulated dataset directly:
 
@@ -94,7 +127,7 @@ Where to go next
       :link: sncosmo_users/index
       :link-type: doc
 
-      From ``sncosmo.fit_lc`` to ``saltjax.fit_salt``.
+      From ``sncosmo.fit_lc`` to ``saltjax.fit_lc``.
 
    .. grid-item-card:: :octicon:`gear;1.5em;sd-mr-1` How it works
       :link: how_it_works
