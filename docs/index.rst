@@ -44,6 +44,33 @@ Installation
 
 See :doc:`installation` for details.
 
+What can be fitted
+------------------
+
+Any combination of a **source** and **effects** supported by sncosmo below:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 20 35
+
+   * - Source (sncosmo)
+     - Function
+     - Fitted parameters
+   * - any SALT2 or SALT3 source: ``"salt2"``, ``"salt2-extended"``, ``"salt3"``, ``"salt3-nir"``…
+     - :func:`saltjax.fit_salt`
+     - ``t0``, ``x0``, ``x1``, ``c`` (+ model covariance)
+   * - any time-series source (``sncosmo.TimeSeriesSource``): ``"hsiao"``, ``"nugent-sn1a"``,
+       ``"nugent-sn2p"``, the SNANA core-collapse templates…
+     - :func:`saltjax.fit_timeseries`
+     - ``t0``, ``amplitude``
+
+**Effects**, with both functions, given as in ``sncosmo.Model`` (``effects``, ``effect_names``,
+``effect_frames``): any sncosmo dust law (``CCM89Dust``, ``OD94Dust``, ``F99Dust``) or any user-defined
+``sncosmo.PropagationEffect`` that is a deterministic transmission, in the observer (``"obs"``) or rest
+(``"rest"``) frame, with parameters set **per target** from the columns ``{name}{param}`` of ``targets``
+(e.g. ``mwebv``, ``hostebv``, ``hostr_v``). They are fixed during the fit. By default, Milky Way CCM89
+dust is applied from the ``mwebv`` column, if present.
+
 In one call
 -----------
 
@@ -71,16 +98,19 @@ of ``targets``):
 
 See :doc:`examples/dust`.
 
-Time-series templates: any ``sncosmo.TimeSeriesSource`` (e.g. ``"hsiao"``, ``"nugent-sn2p"``,
-the SNANA core-collapse templates), fitting ``t0`` and ``amplitude``:
+Any time-series template, with the same effects:
 
 .. code-block:: python
 
-   results = saltjax.fit_timeseries(data, targets, source="hsiao")
+   dust = dict(effects=[sncosmo.CCM89Dust(), sncosmo.CCM89Dust()],
+               effect_names=["mw", "host"], effect_frames=["obs", "rest"])
+   results = saltjax.fit_timeseries(data, targets, source="nugent-sn2p", **dust)
 
-   # check a fit by eye
-   template = saltjax.timeseries.TimeSeriesTemplate.from_name("hsiao")
-   template.show_fit(data, results, index=results.index[0])
+   # check a fit by eye (with the same effects as the fit)
+   template = saltjax.timeseries.TimeSeriesTemplate.from_name("nugent-sn2p")
+   template.show_fit(data, results, index=results.index[0], **dust)
+
+See :doc:`examples/timeseries`.
 
 With `skysurvey <https://skysurvey.readthedocs.io>`_, fit a simulated dataset directly:
 

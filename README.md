@@ -31,6 +31,25 @@ dust (any law, per-SN E(B-V) and R_V) gives the same saltjax time, while sncosmo
 pip install saltjax
 ```
 
+## What can be fitted
+
+Any combination of a **source** and **effects** supported by sncosmo below:
+
+| Source (sncosmo) | Function | Fitted parameters |
+|---|---|---|
+| any SALT2 or SALT3 source: `"salt2"`, `"salt2-extended"`, `"salt2-h17"`, `"salt3"`, `"salt3-nir"`… | `saltjax.fit_salt` | `t0`, `x0`, `x1`, `c` (+ model covariance) |
+| any time-series source (`sncosmo.TimeSeriesSource`): `"hsiao"`, `"nugent-sn1a"`, `"nugent-sn2p"`, the SNANA core-collapse templates… | `saltjax.fit_timeseries` | `t0`, `amplitude` |
+
+**Effects**, with both functions, given as in `sncosmo.Model` (`effects`, `effect_names`, `effect_frames`):
+
+* any sncosmo dust law (`CCM89Dust`, `OD94Dust`, `F99Dust`), or any user-defined `sncosmo.PropagationEffect`
+  that is a deterministic transmission in wavelength;
+* in the observer frame (`"obs"`, e.g. Milky Way dust) or the rest frame (`"rest"`, e.g. host dust);
+* with parameters set **per target**, from the columns `{name}{param}` of `targets` (e.g. `mwebv`, `hostebv`,
+  `hostr_v`), else from the effect instance. They are fixed during the fit.
+
+By default (no `effects`), Milky Way CCM89 dust is applied from the `mwebv` column, if present.
+
 ## Quick start
 
 ```python
@@ -46,25 +65,29 @@ results[["t0", "x0", "x1", "c", "t0_err", "x0_err", "x1_err", "c_err"]]
 results = saltjax.fit_salt(data, targets, source="salt3")
 results = saltjax.fit_salt(data, targets, source="salt2", version="T23")
 
-# any sncosmo dust (effects), e.g. Milky Way and host dust; their parameters are
-# read per target from the columns mwebv, mwr_v, hostebv, hostr_v of targets
-import sncosmo
-results = saltjax.fit_salt(data, targets,
-                           effects=[sncosmo.CCM89Dust(), sncosmo.F99Dust(r_v=2.0)],
-                           effect_names=["mw", "host"], effect_frames=["obs", "rest"])
+# any time-series source: fits t0 and amplitude
+results = saltjax.fit_timeseries(data, targets, source="hsiao")
+results = saltjax.fit_timeseries(data, targets, source="nugent-sn2p")
 ```
 
-### Time-series templates
-
-Any `sncosmo.TimeSeriesSource` (e.g. `"hsiao"`, `"nugent-sn1a"`, `"nugent-sn2p"`, the SNANA
-core-collapse templates): fits `t0` and `amplitude`, as `sncosmo.fit_lc`.
+With effects, the same arguments for both functions, e.g. Milky Way and host dust whose parameters are read per
+target from the columns `mwebv`, `hostebv` and `hostr_v` of `targets`:
 
 ```python
-results = saltjax.fit_timeseries(data, targets, source="hsiao")
+import sncosmo
 
-# check a fit by eye
-template = saltjax.timeseries.TimeSeriesTemplate.from_name("hsiao")
-template.show_fit(data, results, index=results.index[0])
+dust = dict(effects=[sncosmo.CCM89Dust(), sncosmo.F99Dust(r_v=2.0)],
+            effect_names=["mw", "host"], effect_frames=["obs", "rest"])
+
+results = saltjax.fit_salt(data, targets, source="salt3", **dust)
+results = saltjax.fit_timeseries(data, targets, source="nugent-sn2p", **dust)
+```
+
+Check a time-series fit by eye (give the same effects as the fit, if any):
+
+```python
+template = saltjax.timeseries.TimeSeriesTemplate.from_name("nugent-sn2p")
+template.show_fit(data, results, index=results.index[0], **dust)
 ```
 
 `saltjax` is used by [skysurvey](https://github.com/MickaelRigault/skysurvey) through
@@ -85,6 +108,9 @@ template.show_fit(data, results, index=results.index[0])
 * **Model covariance.** `modelcov=True` follows `sncosmo.fit_lc`. The model covariance (a diagonal plus one block
   per band) is inverted exactly with the Woodbury identity.
 * **Errors.** Errors are `2 H^-1`, with `H` the exact Hessian of the chi2 (as Minuit HESSE).
+* **Time-series sources.** sncosmo interpolates them with a tensor-product spline, also linear in the template
+  and separable in phase and wavelength: the band integral of each phase spline function is computed once per
+  target, and the band flux at any phase is the amplitude times a sum over a few spline functions, exactly as sncosmo.
 
 ## Limitations
 
@@ -94,6 +120,7 @@ template.show_fit(data, results, index=results.index[0])
   Other sources (`StretchSource`, `SNEMOSource`, `MLCS2k2Source`, `SUGARSource`) are not supported.
 * Effects (dust) in the observer or rest frame only, with fixed parameters (not fitted); no random scattering
   effects (G10, C11).
+* Time-series sources: no model covariance (as in sncosmo, where only SALT has one).
 * AB magnitude system only.
 * No parameter bounds.
 * Fixed redshift.

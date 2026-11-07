@@ -184,6 +184,7 @@ The steps of :func:`fit_timeseries`, to check or reproduce a fit.
    timeseries.timeseries_bandflux
    timeseries.select_fittable
    timeseries.get_initial_t0
+   timeseries.get_t0_offsets
    timeseries.get_timeseries_batches
    timeseries.fit_timeseries_batches
    timeseries.get_results_table
