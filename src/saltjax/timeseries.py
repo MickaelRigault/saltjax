@@ -44,12 +44,12 @@ __all__ = ["fit_timeseries", "TimeSeriesTemplate",
            # building blocks
            "get_bspline_weights", "get_band_integrals", "get_timeseries_tables", "pack_timeseries",
            "timeseries_bandflux", "fit_timeseries_one", "fit_timeseries_batch", "initial_timeseries_batch",
-           "select_fittable", "get_initial_t0", "get_timeseries_batches", "fit_timeseries_batches",
+           "select_fittable", "get_initial_t0", "get_t0_offsets", "get_timeseries_batches", "fit_timeseries_batches",
            "get_results_table"]
 
 PARAMS = ["t0", "amplitude"]
 TS_FIT_KEYS = ("G", "z") + LC_KEYS        # packed arrays used by the fit
-T0_OFFSETS = tuple(np.arange(-30., 30.5, 1.))  # initial t0 scan [day], around the guess
+T0_STEP = 1.                              # step of the initial t0 scan [rest-frame day]
 CHUNK = 64                                # targets per block of the band integrals (limits memory)
 
 
@@ -204,11 +204,59 @@ class TimeSeriesTemplate:
         Returns
         -------
         float
-            Phase [day], on the template phase grid. Used for the initial t0.
+            Phase [day] of the maximum of the template flux.
         """
         phase = np.linspace(*self.phase_range, 500)
         wave = np.linspace(*self.wave_range, 200)
         return float(phase[np.argmax(self.get_flux(phase, wave).sum(1))])
+
+    def get_sncosmo_model(self, effects=None, effect_names=None, effect_frames=None, mwebv=None, **params):
+        """Get the ``sncosmo.Model`` of this template, with effects (to compare or plot).
+
+        Parameters
+        ----------
+        effects, effect_names, effect_frames : list or None, optional
+            Propagation effects, as in ``sncosmo.Model``. If None, Milky Way
+            CCM89 dust (named 'mw', observer frame) if `mwebv` is given, as
+            :func:`fit_timeseries`. The default is None.
+
+        mwebv : float or None, optional
+            Milky Way E(B-V). Only used with the default effect. The default is None.
+
+        **params
+            Model parameters, e.g. ``z``, ``t0``, ``amplitude``, ``hostebv``.
+
+        Returns
+        -------
+        sncosmo.Model
+            The model.
+
+        Raises
+        ------
+        ValueError
+            If the template was not built from an sncosmo source, or a
+            parameter is not in the model.
+        """
+        if self.source is None:
+            raise ValueError("this template has no sncosmo source (built from its spline only)")
+
+        if effects is None:
+            if mwebv is not None:          # default of fit_timeseries: Milky Way dust
+                effects, effect_names, effect_frames = [sncosmo.CCM89Dust()], ["mw"], ["obs"]
+                params = params | {"mwebv": mwebv}
+            else:
+                effects, effect_names, effect_frames = [], [], []
+        elif mwebv is not None:
+            params = params | {"mwebv": mwebv}
+
+        model = sncosmo.Model(self.source, effects=effects, effect_names=effect_names,
+                              effect_frames=effect_frames)
+        unknown = [key_ for key_ in params if key_ not in model.param_names]
+        if unknown:
+            raise ValueError(f"parameters not in the model: {unknown}, model parameters: {model.param_names}")
+
+        model.set(**params)
+        return model
 
     # --------- #
     #  Plotting #
@@ -253,12 +301,14 @@ class TimeSeriesTemplate:
         ax.legend(fontsize="small", frameon=False)
         return fig
 
-    def show_fit(self, data, results, index, ax=None, time_key=None, zp=25.):  # pragma: no cover
+    def show_fit(self, data, results, index, effects=None, effect_names=None, effect_frames=None,
+                 ax=None, time_key=None, zp=25.):  # pragma: no cover
         """Show the lightcurve of a target and its best-fit model.
 
-        The model is ``sncosmo.Model`` with this template and Milky Way CCM89
-        dust if ``results`` has a 'mwebv' column (the default effect of
-        :func:`fit_timeseries`; other effects are not shown).
+        The model is the ``sncosmo.Model`` of this template (see
+        :meth:`get_sncosmo_model`) with the effects used in the fit, and the
+        parameters of the target in `results` (z, t0, amplitude and the
+        effect parameters, e.g. 'mwebv', 'hostebv').
 
         Parameters
         ----------
@@ -270,6 +320,11 @@ class TimeSeriesTemplate:
 
         index : object
             Target to show (index of `results`).
+
+        effects, effect_names, effect_frames : list or None, optional
+            The effects given to :func:`fit_timeseries`. If None, Milky Way
+            CCM89 dust if `results` has a 'mwebv' column (the default of
+            :func:`fit_timeseries`). The default is None.
 
         ax : matplotlib.axes.Axes or None, optional
             Axes to plot on. If None, a new figure is created. The default is None.
@@ -284,6 +339,12 @@ class TimeSeriesTemplate:
         -------
         matplotlib.figure.Figure
             The figure containing the plot.
+
+        Warns
+        -----
+        UserWarning
+            If `results` has effect parameters that are not in the model (the
+            effects of the fit were not given): the model is then not the fitted one.
         """
         if ax is None:
             import matplotlib.pyplot as plt
@@ -291,12 +352,21 @@ class TimeSeriesTemplate:
         else:
             fig = ax.figure
 
+        # Model: best-fit parameters and effect parameters of the target
         row = results.loc[index]
+        params = {key_: row[key_] for key_ in row.index if not key_.endswith("_err")
+                  and not key_.startswith("cov_") and key_ not in ("chi2", "ndof", "valid")}
+        model = self.get_sncosmo_model(effects=effects, effect_names=effect_names, effect_frames=effect_frames,
+                                       mwebv=params.get("mwebv") if effects is None else None)
+        missing = [key_ for key_ in params if key_ not in model.param_names]
+        if missing:
+            warnings.warn(f"results have parameters not in the model ({missing}): give the effects "
+                          "used in the fit (effects, effect_names, effect_frames) to show the fitted model.")
+        model.set(**{key_: value_ for key_, value_ in params.items() if key_ in model.param_names})
+
+        # Data and model, per band
         lightcurve = data.xs(index)
         time_key = get_time_key(lightcurve, time_key)
-        model = self.get_sncosmo_model(z=row["z"], t0=row["t0"], amplitude=row["amplitude"],
-                                       mwebv=row.get("mwebv", None))
-
         times = np.linspace(lightcurve[time_key].min() - 10, lightcurve[time_key].max() + 10, 300)
         for i, band_ in enumerate(sorted(lightcurve["band"].unique())):
             color = f"C{i}"
@@ -312,41 +382,6 @@ class TimeSeriesTemplate:
                      fontsize="medium")
         ax.legend(fontsize="small", frameon=False)
         return fig
-
-    def get_sncosmo_model(self, z=0., t0=0., amplitude=1., mwebv=None):
-        """Get the ``sncosmo.Model`` of this template (to compare or plot).
-
-        Parameters
-        ----------
-        z, t0, amplitude : float, optional
-            Model parameters. The defaults are 0, 0 and 1.
-
-        mwebv : float or None, optional
-            If given, Milky Way CCM89 dust (R_V=3.1) in the observer frame.
-            The default is None.
-
-        Returns
-        -------
-        sncosmo.Model
-            The model.
-
-        Raises
-        ------
-        ValueError
-            If the template was not built from an sncosmo source.
-        """
-        if self.source is None:
-            raise ValueError("this template has no sncosmo source (built from its spline only)")
-
-        if mwebv is None:
-            model = sncosmo.Model(self.source)
-        else:
-            model = sncosmo.Model(self.source, effects=[sncosmo.CCM89Dust()],
-                                  effect_names=["mw"], effect_frames=["obs"])
-            model.set(mwebv=mwebv)
-
-        model.set(z=z, t0=t0, amplitude=amplitude)
-        return model
 
     # ============= #
     #   Properties  #
@@ -790,11 +825,11 @@ def fit_timeseries_batch(theta0, packed, phase_spline, niter=20):
 
 
 @partial(jax.jit, static_argnames=("phase_spline", "t0_offsets"))
-def initial_timeseries_batch(packed, t0_in, phase_spline, t0_offsets=T0_OFFSETS):
+def initial_timeseries_batch(packed, t0_in, phase_spline, t0_offsets=(0.,)):
     """Get the initial (t0, amplitude) of a batch of targets.
 
-    t0 is scanned over ``t0_in + t0_offsets``, the amplitude is solved
-    linearly, and the lowest chi2 is kept.
+    t0 is scanned over ``t0_in + t0_offsets x (1+z)``, the amplitude is
+    solved linearly, and the lowest chi2 is kept.
 
     Parameters
     ----------
@@ -808,8 +843,8 @@ def initial_timeseries_batch(packed, t0_in, phase_spline, t0_offsets=T0_OFFSETS)
         :attr:`TimeSeriesTemplate.phase_spline`.
 
     t0_offsets : tuple, optional
-        Offsets added to the starting t0 [day]. The default is `T0_OFFSETS`
-        (-30 to +30 days, 1-day steps).
+        Offsets added to the starting t0, in rest-frame days (see
+        :func:`get_t0_offsets`). The default is (0.,): no scan.
 
     Returns
     -------
@@ -822,7 +857,7 @@ def initial_timeseries_batch(packed, t0_in, phase_spline, t0_offsets=T0_OFFSETS)
         weight = packed_["mask"] / packed_["err"] ** 2
 
         def trial(offset_):
-            t0_trial = t0_ + offset_
+            t0_trial = t0_ + offset_ * (1. + packed_["z"])           # rest frame -> observer frame
             model_flux = timeseries_bandflux(jnp.array([t0_trial, 1.]), packed_, phase_spline)
             # amplitude: weighted linear least squares
             norm = jnp.sum(weight * model_flux * model_flux)
@@ -842,7 +877,7 @@ def initial_timeseries_batch(packed, t0_in, phase_spline, t0_offsets=T0_OFFSETS)
 #                    #
 # ================== #
 def fit_timeseries(data, targets, source="hsiao", version=None, indexes=None, phase_range=None,
-                   guess="data", t0_offsets=T0_OFFSETS,
+                   guess="data", t0_offsets=None,
                    effects=None, effect_names=None, effect_frames=None, mwebv_key="mwebv", mw_r_v=3.1,
                    batch_points=2048, minsnr=5., niter=20, time_key=None, progress_bar=False):
     """Fit a time-series template on many lightcurves at once, reproducing ``sncosmo.fit_lc``.
@@ -857,7 +892,8 @@ def fit_timeseries(data, targets, source="hsiao", version=None, indexes=None, ph
     1. loads the template (:class:`TimeSeriesTemplate`) and packs the
        lightcurves with their band integrals (:func:`pack_timeseries`),
     2. selects the targets that can be fitted (:func:`select_fittable`),
-    3. scans t0 for the initial guess (:func:`initial_timeseries_batch`),
+    3. scans t0 for the initial guess (:func:`get_initial_t0`,
+       :func:`get_t0_offsets`, :func:`initial_timeseries_batch`),
     4. fits by batches of fixed shapes, compiled once per shape
        (:func:`fit_timeseries_batch`),
     5. gathers the results in a table (:func:`get_results_table`).
@@ -889,14 +925,15 @@ def fit_timeseries(data, targets, source="hsiao", version=None, indexes=None, ph
         If None, all points (as ``sncosmo.fit_lc``). The default is None.
 
     guess : {'data', 'truth'}, optional
-        Initial t0. 'data': the time of the highest S/N point minus the peak
-        phase of the template (redshifted); 'truth': the targets' t0. t0 is
-        then scanned over `t0_offsets` and the amplitude solved linearly.
-        The default is 'data'.
+        Initial t0. 'data': t0 is scanned so that the highest S/N point is at
+        every phase of the template (1-day steps), which is robust for any
+        lightcurve shape (e.g. the plateau of SNe II-P); 'truth': the targets'
+        t0. In both cases, the amplitude is solved linearly. The default is 'data'.
 
-    t0_offsets : tuple, optional
-        Offsets of the initial t0 scan [day]. The default is -30 to +30 days
-        in 1-day steps.
+    t0_offsets : tuple or None, optional
+        Custom initial t0 scan: offsets in rest-frame days added to the
+        starting t0 (see :func:`get_t0_offsets`). If None, the scan of
+        `guess`. The default is None.
 
     effects, effect_names, effect_frames : list or None, optional
         Propagation effects, as in ``sncosmo.Model`` (see
@@ -972,7 +1009,9 @@ def fit_timeseries(data, targets, source="hsiao", version=None, indexes=None, ph
         fittable = select_fittable(packed, minsnr=minsnr)
 
         # Fit, by batches
-        t0_in = get_initial_t0(packed, template, targets.loc[indexes], guess=guess)
+        t0_in = get_initial_t0(packed, targets.loc[indexes], guess=guess)
+        if t0_offsets is None:
+            t0_offsets = get_t0_offsets(template, guess=guess)
         batches = get_timeseries_batches(packed, t0_in, fittable, batch_points=batch_points)
         out = fit_timeseries_batches(batches, template.phase_spline, t0_offsets=tuple(t0_offsets),
                                      niter=niter, progress_bar=progress_bar)
@@ -1028,23 +1067,20 @@ def select_fittable(packed, minsnr=5.):
     return detected & constrained
 
 
-def get_initial_t0(packed, template, truth, guess="data"):
-    """Get the starting t0 of each target (then scanned, see :func:`initial_timeseries_batch`).
+def get_initial_t0(packed, truth, guess="data"):
+    """Get the starting t0 of each target (then scanned, see :func:`get_t0_offsets`).
 
     Parameters
     ----------
     packed : dict
         Output of :func:`pack_timeseries`.
 
-    template : TimeSeriesTemplate
-        The template.
-
     truth : pandas.DataFrame
         Targets (same order as `packed`), with a 't0' column if ``guess='truth'``.
 
     guess : {'data', 'truth'}, optional
-        'data': time of the highest S/N point minus the (redshifted) peak
-        phase of the template; 'truth': the targets' t0. The default is 'data'.
+        'data': time of the highest S/N point; 'truth': the targets' t0.
+        The default is 'data'.
 
     Returns
     -------
@@ -1061,8 +1097,46 @@ def get_initial_t0(packed, template, truth, guess="data"):
 
     if guess == "data":
         snr = np.where(packed["mask"] > 0, packed["flux"] / packed["err"], -np.inf)
-        t_best = packed["t"][np.arange(len(snr)), np.argmax(snr, axis=1)]
-        return t_best - template.get_peak_phase() * (1. + packed["z"])
+        return packed["t"][np.arange(len(snr)), np.argmax(snr, axis=1)]
+
+    raise ValueError(f"guess must be 'data' or 'truth', not {guess!r}")
+
+
+def get_t0_offsets(template, guess="data", step=T0_STEP):
+    """Get the offsets of the initial t0 scan, in rest-frame days.
+
+    The trial t0 of a target are ``t0_in + offsets x (1+z)``, with ``t0_in``
+    from :func:`get_initial_t0`.
+
+    Parameters
+    ----------
+    template : TimeSeriesTemplate
+        The template.
+
+    guess : {'data', 'truth'}, optional
+        'data': ``t0_in`` is the time of the highest S/N point, and the
+        offsets put it at every phase of the template (``-phase``); 'truth':
+        no scan (``(0.,)``). The default is 'data'.
+
+    step : float, optional
+        Step of the scan [rest-frame day]. The default is 1.
+
+    Returns
+    -------
+    tuple of float
+        Offsets [rest-frame day].
+
+    Raises
+    ------
+    ValueError
+        If `guess` is not 'data' or 'truth'.
+    """
+    if guess == "truth":
+        return (0.,)
+
+    if guess == "data":
+        phases = np.arange(template.phase_range[0], template.phase_range[1] + step / 2, step)
+        return tuple(float(-phase_) for phase_ in phases)
 
     raise ValueError(f"guess must be 'data' or 'truth', not {guess!r}")
 
@@ -1110,7 +1184,7 @@ def get_timeseries_batches(packed, t0_in, fittable, batch_points=2048):
     return batches
 
 
-def fit_timeseries_batches(batches, phase_spline, t0_offsets=T0_OFFSETS, niter=20, progress_bar=False):
+def fit_timeseries_batches(batches, phase_spline, t0_offsets=(0.,), niter=20, progress_bar=False):
     """Compile (in parallel, once per shape) and run the fit of each batch.
 
     Parameters
@@ -1122,7 +1196,8 @@ def fit_timeseries_batches(batches, phase_spline, t0_offsets=T0_OFFSETS, niter=2
         :attr:`TimeSeriesTemplate.phase_spline`.
 
     t0_offsets : tuple, optional
-        Offsets of the initial t0 scan [day]. The default is `T0_OFFSETS`.
+        Offsets of the initial t0 scan [rest-frame day] (see
+        :func:`get_t0_offsets`). The default is (0.,): no scan.
 
     niter : int, optional
         Number of Levenberg-Marquardt iterations. The default is 20.

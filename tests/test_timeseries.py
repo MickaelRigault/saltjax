@@ -109,6 +109,26 @@ def test_template_unsupported_source_raises():
         timeseries.TimeSeriesTemplate.from_source(stretch)
 
 
+# tests for the func get_sncosmo_model
+def test_get_sncosmo_model(source):
+    template = timeseries.TimeSeriesTemplate.from_source(source)
+    model = template.get_sncosmo_model(z=0.05, t0=10., amplitude=2.)
+    assert model.param_names == ["z", "t0", "amplitude"]
+    assert model.get("amplitude") == 2.
+
+    # default effect, as fit_timeseries: Milky Way dust
+    model = template.get_sncosmo_model(z=0.05, mwebv=0.1)
+    assert model.get("mwebv") == 0.1
+
+    # any effects
+    model = template.get_sncosmo_model(effects=[sncosmo.CCM89Dust()], effect_names=["host"],
+                                       effect_frames=["rest"], hostebv=0.2, hostr_v=2.5)
+    assert model.get("hostr_v") == 2.5
+
+    with pytest.raises(ValueError, match="not in the model"):
+        template.get_sncosmo_model(hostebv=0.2)
+
+
 # tests for the func timeseries_bandflux
 @pytest.mark.parametrize("degree, zero_before", [(3, False), (1, True)])
 def test_bandflux_matches_sncosmo(degree, zero_before):
@@ -133,6 +153,47 @@ def test_bandflux_matches_sncosmo(degree, zero_before):
             bands = np.asarray(sorted(data["band"].unique()))[packed["band"][i][:npoints]]
             ref = [model.bandflux(b_, t_, zp=25., zpsys="ab") for b_, t_ in zip(bands, packed["t"][i][:npoints])]
             np.testing.assert_allclose(np.asarray(mine), ref, rtol=1e-12, atol=1e-12 * np.max(np.abs(ref)))
+
+
+# tests for the initial t0
+def test_get_t0_offsets(source):
+    template = timeseries.TimeSeriesTemplate.from_source(source)
+    offsets = timeseries.get_t0_offsets(template)
+    assert offsets[0] == -template.phase_range[0] and offsets[-1] == -template.phase_range[1]
+    assert np.allclose(np.diff(offsets), -1.)
+    assert timeseries.get_t0_offsets(template, guess="truth") == (0.,)
+    with pytest.raises(ValueError):
+        timeseries.get_t0_offsets(template, guess="random")
+
+
+def test_fit_plateau_observed_late():
+    """ a plateau lightcurve observed only after its peak: the t0 scan must find the truth """
+    phase = np.linspace(0., 150., 151)
+    wave = np.linspace(2000., 11000., 451)
+    rise, drop = 1. / (1. + np.exp(-(phase - 8.) / 2.)), 1. / (1. + np.exp((phase - 100.) / 4.))
+    light = rise * (1. - phase / 400.) * (0.2 + 0.8 * drop) + 0.01                # smooth rise, plateau, drop
+    sed = (wave / 5000.) ** -2
+    plateau = sncosmo.TimeSeriesSource(phase, wave, light[:, None] * sed[None] * 1e-15, name="plateau")
+
+    rng = np.random.default_rng(2)
+    targets = pandas.DataFrame({"z": [0.02, 0.03, 0.04], "t0": [59_000., 59_010., 59_020.], "amplitude": 1.},
+                               index=pandas.Index(np.arange(3), name="index"))
+    lcs = []
+    for index_, row in targets.iterrows():
+        model = sncosmo.Model(plateau)
+        model.set(z=row["z"], t0=row["t0"], amplitude=1.)
+        time = row["t0"] + np.sort(rng.uniform(40, 140, 50))              # plateau and drop only
+        band = rng.choice(BANDS, len(time))
+        flux = np.array([model.bandflux(b_, t_, zp=25., zpsys="ab") for b_, t_ in zip(band, time)])
+        fluxerr = np.full(len(time), 0.02 * flux.max())
+        lcs.append(pandas.DataFrame({"time": time, "band": band, "zp": 25., "zpsys": "ab",
+                                     "flux": flux + rng.normal(0, fluxerr), "fluxerr": fluxerr}))
+    data = pandas.concat(lcs, keys=targets.index, names=["index", "index_obs"])
+
+    from_data = saltjax.fit_timeseries(data, targets, source=plateau)
+    from_truth = saltjax.fit_timeseries(data, targets, source=plateau, guess="truth")
+    np.testing.assert_allclose(from_data["chi2"], from_truth["chi2"], rtol=1e-6)
+    assert ((from_data["t0"] - targets["t0"]).abs() / from_data["t0_err"]).max() < 5
 
 
 # tests for the func fit_timeseries
@@ -199,3 +260,11 @@ def test_show(source, simulation):
     results = saltjax.fit_timeseries(data, targets, source=template)
     assert isinstance(template.show(), matplotlib.figure.Figure)
     assert isinstance(template.show_fit(data, results, index=0), matplotlib.figure.Figure)
+
+    # with effects: the same as the fit, else a warning
+    dust = dict(effects=[sncosmo.CCM89Dust(), sncosmo.CCM89Dust()], effect_names=["mw", "host"],
+                effect_frames=["obs", "rest"])
+    results = saltjax.fit_timeseries(data, targets.assign(hostebv=0.1), source=template, **dust)
+    assert isinstance(template.show_fit(data, results, index=0, **dust), matplotlib.figure.Figure)
+    with pytest.warns(UserWarning, match="not in the model"):
+        template.show_fit(data, results, index=0)
